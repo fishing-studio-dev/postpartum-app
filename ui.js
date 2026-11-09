@@ -36,7 +36,7 @@ export const SAVE_TEXT = Object.freeze({
 export const NOPLAN = Object.freeze({
   on: '予定は不要にする',
   off: '予定は不要を外す',
-  note: '印を付けると『まだ未定』に出なくなり、通知とカレンダー追加の対象から外れます。外せば元に戻ります',
+  note: '印を付けると『まだ未定』に出なくなり、通知とカレンダー追加の対象から外れます。期限が近い・過ぎたときは『きょう』に出ます。外せば元に戻ります',
   calNote: '『予定は不要』の印があるので、カレンダーには追加しません（印を外すと追加できます）',
   rowBtn: '予定は不要',
   toastRow: '『予定は不要』にしました（やることで外せます）',
@@ -353,6 +353,7 @@ export function mountUI(document, opts = {}) {
       b.append(el('span', 'badge att-badge is-' + e.kind, e.kind === 'overdue' ? '締切を過ぎています' : '締切が近い'));
       b.append(el('span', 'att-title', e.item.title));
       b.append(el('span', 'att-date', deadlineLabel(e.item, settings())));
+      if (isNoPlan(e.item)) b.append(el('span', 'badge noplan', NO_PLAN_TEXT));   // R9.2
       li.append(b);
       return li;
     }));

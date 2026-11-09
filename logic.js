@@ -407,7 +407,11 @@ const byDateTime = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) ||
 
 // きょう：今日・明日・もうすぐ（3日以内）。予定日があればその日、無ければ期限の日。済みも「済み」として出す。
 // R9.1：「予定は不要」の印があって予定日が無い項目は出さない（予定日がある項目は表示だけ残す。通知はしない）。
+// R9.2：ただし印があっても、済んでいない締切（開始日「から」ではない期限）で、印のない項目と同じ範囲（今日〜3日以内）に
+//       入るものは出す。済んだもの・期限が遠いものは出さない（R9.1 のまま）。
 export const SOON_AHEAD = 3;
+// R9.2：印のある・予定日の無い項目を、きょうに締切として出すか（済んでいない・期限の日がある・開始日ではない）。
+export const noPlanDeadlineShown = (it, settings) => isNoPlan(it) && !planOf(it).planDate && !it.done && dateKind(it) !== 'from' && Boolean(itemDate(it, settings));
 export function todayGroups(items, settings, today) {
   const out = {today: [], tomorrow: [], soon: []};
   if (!isValidDate(today)) return out;
@@ -415,7 +419,7 @@ export function todayGroups(items, settings, today) {
   for (const it of items || []) {
     if (!it) continue;
     const p = planOf(it);
-    if (isNoPlan(it) && !p.planDate) continue;
+    if (isNoPlan(it) && !p.planDate && !noPlanDeadlineShown(it, settings)) continue;
     const date = p.planDate || itemDate(it, settings);
     if (!date || date < today || date > t3) continue;
     const e = {item: it, date, time: p.planDate ? p.planTime : null, planned: Boolean(p.planDate)};
@@ -426,13 +430,13 @@ export function todayGroups(items, settings, today) {
 }
 
 // きょうの「確認が必要なこと」：締切を過ぎた未完了、締切が近い（3日以内）未完了。開始日（から）は含めない。
-// R9.1：「予定は不要」の印がある項目は含めない。
+// R9.1 では「予定は不要」の印がある項目を含めなかった。R9.2：印があっても、印のない項目と同じ基準で含める（済んだものは含めない）。
 export function attentionItems(items, settings, today) {
   const overdue = [], soon = [];
   if (!isValidDate(today)) return [];
   const t3 = addDays(today, SOON_AHEAD);
   for (const it of items || []) {
-    if (!it || it.done || isNoPlan(it) || dateKind(it) === 'from') continue;
+    if (!it || it.done || dateKind(it) === 'from') continue;
     const d = itemDate(it, settings);
     if (!d) continue;
     if (d < today) overdue.push({item: it, kind: 'overdue', date: d});

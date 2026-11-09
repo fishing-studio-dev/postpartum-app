@@ -1,46 +1,39 @@
-/* R6 bootstrap: connects offline.js + ui.js to this page and registers the same-origin service worker.
-   The page itself never opens network connections (CSP connect-src 'none'). */
-(function (window) {
-  'use strict';
-  const document = window.document;
-  const navigator = window.navigator;
-  const R6 = window.PostpartumR6;
-  const storage = {getItem: key => window.localStorage.getItem(key), setItem: (key, value) => window.localStorage.setItem(key, value)};
-  const app = window.PostpartumR6UI.mount(document, storage, {
-    confirm: text => window.confirm(text),
-    today: () => R6.todayString(new Date())
-  });
-  window.addEventListener('storage', event => { if (event.key === R6.KEY || event.key === null) app.externalChange(); });
-  window.addEventListener('beforeunload', event => { if (app.isDirty()) { event.preventDefault(); event.returnValue = ''; } });
-  // The date may have changed while the app was in the background.
-  window.addEventListener('focus', () => { if (!app.isDirty()) app.render(); });
+// 起動。Firebase SDK は firebase-config.js で固定した URL だけを読み込む。
+import {createStore} from './data.js';
+import {mountUI} from './ui.js';
+import {preparePhoto} from './photo.js';
+import {watchOnline, isOnline} from './offline.js';
+import {todayLocal} from './logic.js';
 
-  const WORKER = './sw.js';
-  const status = document.getElementById('offline-status');
-  function show(text) { status.textContent = text; }
-  if (!navigator || !('serviceWorker' in navigator) || window.isSecureContext === false) {
-    show('この開き方では、ネットがないときは使えません。公開されたアドレス（HTTPS）から開いてください。入力と保存はこのまま使えます。');
-    return;
+const F = globalThis.SANGO_FIREBASE;
+
+export async function boot(win, loadModule = url => import(url)) {
+  const doc = win.document;
+  const ui = mountUI(doc, {
+    confirm: text => win.confirm(text),
+    today: () => todayLocal(new Date()),
+    isOnline: () => isOnline(win),
+    preparePhoto: file => preparePhoto(file, {createImageBitmap: win.createImageBitmap && win.createImageBitmap.bind(win), document: doc, URL: win.URL})
+  });
+  watchOnline(win, on => ui.setOnline(on));
+  if (win.navigator && win.navigator.serviceWorker && win.isSecureContext) {
+    win.navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
-  let url = WORKER;
+  let mods;
   try {
-    // CSP requires Trusted Types. Only this one fixed, relative worker URL is allowed.
-    if (window.trustedTypes && typeof window.trustedTypes.createPolicy === 'function') {
-      const policy = window.trustedTypes.createPolicy('postpartum-r6-sw', {
-        createScriptURL(value) { if (value !== WORKER) throw new TypeError('unexpected-worker-url'); return value; }
-      });
-      url = policy.createScriptURL(WORKER);
-    }
-  } catch (_) {
-    show('準備できませんでした。このページを開き直してください。直らないときは、iPhoneはSafari、AndroidはChromeで開いてください。入力と保存はこのまま使えます。');
-    return;
+    mods = await Promise.all([loadModule(F.sdk.app), loadModule(F.sdk.auth), loadModule(F.sdk.firestore)]);
+  } catch {
+    ui.render({auth: 'error', items: [], photos: [], settings: null, error: 'つながったら開けます'});
+    return null;
   }
-  show('ネットがなくても使えるように準備しています…');
-  Promise.resolve()
-    .then(() => navigator.serviceWorker.register(url, {scope: './'}))
-    .then(() => navigator.serviceWorker.ready)
-    .then(
-      () => show('準備完了：ネットがなくても使えます'),
-      () => show('準備できませんでした。ネットにつないだ状態でこのページを開き直してください。入力と保存はこのまま使えます。')
-    );
-})(window);
+  const [appSdk, authSdk, fs] = mods;
+  const app = appSdk.initializeApp(F.config);
+  const auth = authSdk.getAuth(app);
+  const db = fs.initializeFirestore(app, {localCache: fs.persistentLocalCache({tabManager: fs.persistentMultipleTabManager()})});
+  const store = createStore({auth, db, authSdk, fs});
+  ui.attach(store);
+  store.start();
+  return store;
+}
+
+if (typeof window !== 'undefined' && window.document && F) boot(window);

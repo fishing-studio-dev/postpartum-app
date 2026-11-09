@@ -1,236 +1,301 @@
-/* R6 screen: builds the list, 近日 summary, filters, editor and settings panels.
-   Uses createElement / textContent only (never HTML strings). No network.
-   Exported as globalThis.PostpartumR6UI. */
-(function (root) {
-  'use strict';
-  const COLLAPSED = 3;
-  function mount(document, storage, options) {
-    const R6 = root.PostpartumR6;
-    const opts = options || {};
-    const confirmAction = typeof opts.confirm === 'function' ? opts.confirm : () => false;
-    const today = typeof opts.today === 'function' ? opts.today : () => R6.todayString(new Date());
-    const store = R6.createStore(storage, {newId: opts.newId});
-    const el = id => { const e = document.getElementById(id); if (!e) throw new Error('missing element ' + id); return e; };
-    const view = {category: 'all', undoneOnly: false, soonOpen: false};
-    let editing = null; // {id: string|null, checklist: [{id?, text, done}]}
-    let editorDirty = false;
+// 画面。DOM は createElement / textContent だけで作る（HTML 文字列は使わない）。
+import {CATEGORIES, DUE_DATE, groupItems, itemDate, computeDue, dateLabel, conditionLabel, isOverdue, doneLabel, formatShort, formatMD, toDate, shortName} from './logic.js';
+import {OFFLINE_TEXT, QUEUED_TEXT} from './offline.js';
+import {MAX_FILES} from './photo.js';
+import {errText} from './data.js';
 
-    function make(tag, className, text) {
-      const e = document.createElement(tag);
-      if (className) e.setAttribute('class', className);
-      if (text !== undefined) e.textContent = text;
-      return e;
-    }
-    const label = id => { const c = R6.CATEGORIES.find(x => x.id === id); return c ? c.label : ''; };
-    function shortDate(date, now) {
-      if (!date) return '日付なし';
-      const [y, m, d] = date.split('-').map(Number);
-      return (date.slice(0, 4) === now.slice(0, 4) ? '' : y + '/') + m + '/' + d;
-    }
-    function focus(e) { if (e && typeof e.focus === 'function') e.focus(); }
+export const DENIED_TEXT = 'このアプリは使えません';
 
-    // --- static parts built once ---
-    const chipButtons = [];
-    [{id: 'all', label: 'すべて'}].concat(R6.CATEGORIES).forEach(cat => {
-      const b = make('button', 'chip', cat.label);
-      b.setAttribute('type', 'button');
-      b.setAttribute('data-category', cat.id);
-      b.onclick = () => { view.category = cat.id; render(); };
-      chipButtons.push(b);
-      el('chips').append(b);
-    });
-    R6.CATEGORIES.forEach(cat => { const o = make('option', '', cat.label); o.value = cat.id; el('f-category').append(o); });
+export function mountUI(document, opts = {}) {
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const confirmFn = opts.confirm || (() => true);
+  const today = opts.today || (() => '');
+  const online = opts.isOnline || (() => true);
+  const later = opts.setTimeout || ((fn, ms) => setTimeout(fn, ms));
+  let store = null;
+  let state = {auth: 'loading', items: [], photos: [], settings: null};
+  let cat = 'すべて', showDone = false, tab = 'todo';
+  let detailId = null, editId = null, viewerId = null;
+  let netOnline = true, toastSeq = 0;
 
-    // --- main render ---
-    function renderSoon(items, now) {
-      const {overdue, soon} = R6.upcoming(items, now);
-      const title = '近日（今日から' + R6.SOON_DAYS + '日以内）の未完了 ' + soon.length + '件' + (overdue.length ? '・日付を過ぎた未完了 ' + overdue.length + '件' : '');
-      el('soon-title').textContent = title;
-      const all = overdue.map(item => ({item, group: '日付を過ぎた未完了'})).concat(soon.map(item => ({item, group: '近日'})));
-      const list = el('soon-list');
-      list.replaceChildren();
-      if (!all.length) { list.append(make('li', 'soon-none', '近日の未完了はありません。')); el('soon-toggle').hidden = true; return; }
-      const entries = all.length;
-      const visible = view.soonOpen ? all : all.slice(0, COLLAPSED);
-      let group = '';
-      for (const row of visible) {
-        if (row.group !== group) { group = row.group; list.append(make('li', 'soon-group', group)); }
-        const li = make('li', group === '近日' ? 'soon-item' : 'soon-item late');
-        const b = make('button', 'soon-open');
-        b.setAttribute('type', 'button');
-        b.append(make('span', 'date', shortDate(row.item.date, now)), make('span', 'title', row.item.title));
-        b.onclick = () => openEditor(row.item.id);
-        li.append(b);
-        list.append(li);
-      }
-      const toggle = el('soon-toggle');
-      toggle.hidden = entries <= COLLAPSED;
-      toggle.textContent = view.soonOpen ? 'たたむ' : 'すべて表示（' + entries + '件）';
-      toggle.setAttribute('aria-expanded', view.soonOpen ? 'true' : 'false');
-    }
-    function renderRow(item, now, birthDate) {
-      const li = make('li', 'row');
-      li.setAttribute('data-done', item.done ? 'true' : 'false');
-      const box = make('label', 'row-check');
-      const check = make('input');
-      check.setAttribute('type', 'checkbox');
-      check.setAttribute('aria-label', item.title + ' を完了にする');
-      check.checked = item.done;
-      check.onchange = () => { store.setDone(item.id, check.checked); render(); };
-      box.append(check);
-      const open = make('button', 'row-main');
-      open.setAttribute('type', 'button');
-      open.setAttribute('aria-label', item.title + ' を開く');
-      open.append(make('span', 'date', shortDate(item.date, now)), make('span', 'title', item.title), make('span', 'tag', label(item.category)));
-      if (item.memo) open.append(make('span', 'mark', 'メモ'));
-      if (item.checklist.length) open.append(make('span', 'mark', 'チェック ' + item.checklist.filter(c => c.done).length + '/' + item.checklist.length));
-      if (R6.isOutOfPeriod(item.date, birthDate)) open.append(make('span', 'mark outside', '期間外'));
-      if (item.date && !item.done && item.date < now) open.append(make('span', 'mark late', '日付を過ぎた'));
-      open.onclick = () => openEditor(item.id);
-      li.append(box, open);
-      return li;
-    }
-    function render() {
-      const state = store.state;
-      const now = today();
-      el('message').textContent = store.notice;
-      el('message').setAttribute('data-kind', store.kind);
-      el('reload').hidden = !(store.stale || store.blocked);
-      renderSoon(state.items, now);
-      const p = R6.period(state.birthDate);
-      el('period').textContent = p ? '出産日（' + p.start + '）〜 約6か月（' + p.end + ' ごろ）' : '出産日は未設定です（「設定」で入力できます）。';
-      chipButtons.forEach(b => b.setAttribute('aria-pressed', b.getAttribute('data-category') === view.category ? 'true' : 'false'));
-      el('undone-only').checked = view.undoneOnly;
-      const shown = R6.sortItems(R6.filterItems(state.items, view));
-      el('list-count').textContent = '表示 ' + shown.length + '件 / 全 ' + state.items.length + '件';
-      el('empty').hidden = state.items.length > 0 || store.blocked;
-      const list = el('list');
-      list.replaceChildren();
-      shown.forEach(item => list.append(renderRow(item, now, state.birthDate)));
-      if (!shown.length && state.items.length) list.append(make('li', 'row-none', '条件に合う項目はありません。'));
-    }
+  const settings = () => state.settings || {birthDate: null, dueDate: DUE_DATE};
+  const findItem = id => state.items.find(i => i.id === id) || null;
 
-    // --- editor panel ---
-    function renderChecklist() {
-      const list = el('f-check-list');
-      list.replaceChildren();
-      editing.checklist.forEach((entry, index) => {
-        const li = make('li', 'check-row');
-        const box = make('label', 'check-box');
-        const input = make('input');
-        input.setAttribute('type', 'checkbox');
-        input.checked = entry.done;
-        input.onchange = () => { entry.done = input.checked; editorDirty = true; };
-        box.append(input, make('span', 'check-text', entry.text));
-        const remove = make('button', 'ghost small', '削除');
-        remove.setAttribute('type', 'button');
-        remove.setAttribute('aria-label', entry.text + ' を削除');
-        remove.onclick = () => { editing.checklist.splice(index, 1); editorDirty = true; renderChecklist(); };
-        li.append(box, remove);
-        list.append(li);
-      });
-      el('f-check-count').textContent = editing.checklist.length + '/' + R6.LIMITS.checklist;
-    }
-    function openEditor(id) {
-      const item = id ? store.item(id) : null;
-      if (id && !item) { render(); return; }
-      el('settings').hidden = true;
-      editing = {id: item ? item.id : null, checklist: item ? item.checklist : []};
-      editorDirty = false;
-      el('editor-title').textContent = item ? '編集' : '追加';
-      el('f-title').value = item ? item.title : '';
-      el('f-category').value = item ? item.category : (view.category !== 'all' ? view.category : R6.CATEGORIES[0].id);
-      el('f-date').value = item ? item.date : '';
-      el('f-memo').value = item ? item.memo : '';
-      el('f-done').checked = item ? item.done : false;
-      el('f-check-text').value = '';
-      el('f-error').textContent = '';
-      el('f-delete').hidden = !item;
-      renderChecklist();
-      el('editor').hidden = false;
-      focus(el('f-title'));
-    }
-    function closeEditor() { editing = null; editorDirty = false; el('editor').hidden = true; }
-    ['f-title', 'f-category', 'f-date', 'f-memo', 'f-done'].forEach(id => {
-      const field = el(id);
-      field.oninput = () => { editorDirty = true; };
-      field.onchange = () => { editorDirty = true; };
-    });
-    el('f-check-add').onclick = () => {
-      const text = String(el('f-check-text').value).trim();
-      if (editing.checklist.length >= R6.LIMITS.checklist) { el('f-error').textContent = R6.TEXT.checkCount; return; }
-      if (!text || [...text].length > R6.LIMITS.checkText) { el('f-error').textContent = R6.TEXT.checkText; return; }
-      editing.checklist.push({text, done: false});
-      el('f-check-text').value = '';
-      el('f-error').textContent = '';
-      editorDirty = true;
-      renderChecklist();
-    };
-    el('f-save').onclick = () => {
-      const fields = {
-        title: el('f-title').value, category: el('f-category').value, date: el('f-date').value,
-        memo: el('f-memo').value, done: el('f-done').checked === true,
-        checklist: editing.checklist.map(c => (c.id ? {id: c.id, text: c.text, done: c.done} : {text: c.text, done: c.done}))
-      };
-      const result = editing.id ? store.updateItem(editing.id, fields) : store.addItem(fields);
-      if (result === 'saved') closeEditor();
-      else el('f-error').textContent = store.notice;
-      render();
-    };
-    el('f-cancel').onclick = () => {
-      if (editorDirty && !confirmAction('保存していない変更を破棄して閉じますか？')) return;
-      closeEditor(); render();
-    };
-    el('f-delete').onclick = () => {
-      const item = editing && editing.id ? store.item(editing.id) : null;
-      if (!item) { closeEditor(); render(); return; }
-      if (!confirmAction('「' + item.title + '」を削除しますか？元に戻せません。')) return;
-      if (store.removeItem(item.id) === 'saved') closeEditor();
-      else el('f-error').textContent = store.notice;
-      render();
-    };
-
-    // --- main controls ---
-    el('add').onclick = () => openEditor(null);
-    el('examples').onclick = () => { store.addExamples(today()); render(); };
-    el('undone-only').onchange = () => { view.undoneOnly = el('undone-only').checked === true; render(); };
-    el('soon-toggle').onclick = () => { view.soonOpen = !view.soonOpen; render(); };
-    el('reload').onclick = () => {
-      if (editing && editorDirty && !confirmAction('保存していない変更を破棄して、最新の内容を読み込みますか？')) return;
-      closeEditor(); store.reload(); render();
-    };
-
-    // --- settings panel ---
-    el('settings-open').onclick = () => {
-      if (editing) return;
-      el('s-birth').value = store.state.birthDate;
-      el('settings').hidden = false;
-      focus(el('s-birth'));
-    };
-    el('s-close').onclick = () => { el('settings').hidden = true; };
-    el('s-birth-save').onclick = () => { if (store.setBirthDate(el('s-birth').value) === 'saved') el('settings').hidden = true; render(); };
-    el('s-birth-clear').onclick = () => { if (store.setBirthDate('') === 'saved') { el('s-birth').value = ''; el('settings').hidden = true; } render(); };
-    el('s-clear-all').onclick = () => {
-      if (!confirmAction('この端末に保存したすべての項目と出産日を削除しますか？元に戻せません。')) return;
-      if (store.clearAll() === 'saved') el('settings').hidden = true;
-      render();
-    };
-
-    render();
-    return {
-      store,
-      render,
-      openEditor,
-      isDirty() { return !!editing && editorDirty; },
-      // Another tab changed the stored data. Without unsaved edits, show it now;
-      // otherwise keep the edits and ask the user to reload explicitly.
-      externalChange() {
-        const clean = !(editing && editorDirty);
-        if (clean && editing) closeEditor();
-        store.externalChange(clean);
-        render();
-      }
-    };
+  function toast(text) {
+    const t = $('toast');
+    t.textContent = text; t.hidden = !text;
+    const seq = ++toastSeq;
+    if (text) later(() => { if (seq === toastSeq) { t.hidden = true; t.textContent = ''; } }, 3000);
   }
-  root.PostpartumR6UI = Object.freeze({mount});
-})(globalThis);
+  // 書き込みの結果は待たない（オフラインでも順番待ちにされる）。失敗だけ知らせる。
+  function track(write) {
+    if (!online() || !netOnline) toast(QUEUED_TEXT);
+    if (write && typeof write.catch === 'function') write.catch(e => toast(errText(e)));
+  }
+
+  // ---- screens ----
+  function renderScreens() {
+    const a = state.auth;
+    $('loading').hidden = a !== 'loading';
+    $('login').hidden = !(a === 'signedOut' || a === 'denied' || a === 'error');
+    $('app').hidden = a !== 'ready';
+    $('login-msg').textContent = a === 'denied' ? DENIED_TEXT : (a === 'ready' ? '' : state.error || '');
+    $('login-btn').disabled = false;
+    if (a !== 'ready') for (const id of ['detail', 'editor', 'settings', 'viewer']) $(id).hidden = true;
+  }
+  function renderPill() {
+    const off = !netOnline || (online() === false);
+    const pill = $('offline-pill');
+    pill.hidden = !off;
+    pill.textContent = off ? OFFLINE_TEXT : '';
+  }
+
+  // ---- todo ----
+  function renderChips() {
+    const box = $('chips');
+    box.replaceChildren(...['すべて', ...CATEGORIES].map(c => {
+      const b = el('button', 'chip', c);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', String(c === cat));
+      b.onclick = () => { cat = c; renderTodo(); };
+      return b;
+    }));
+  }
+  function row(item, s, t) {
+    const li = el('li', 'row' + (item.done ? ' is-done' : '') + (isOverdue(item, s, t) ? ' is-overdue' : ''));
+    li.setAttribute('data-id', item.id);
+    const check = el('button', 'check', item.done ? '✓' : '');
+    check.type = 'button';
+    check.setAttribute('aria-pressed', String(Boolean(item.done)));
+    check.setAttribute('aria-label', item.done ? '完了を取り消す' : '完了にする');
+    check.onclick = () => toggleDone(item.id);
+    const main = el('button', 'row-main');
+    main.type = 'button';
+    main.onclick = () => openDetail(item.id);
+    const title = el('span', 'row-title', item.title);
+    const meta = el('span', 'row-meta');
+    if (isOverdue(item, s, t)) meta.append(el('span', 'badge overdue', '期限切れ'));
+    const label = item.done ? doneLabel(item) : dateLabel(item, s);
+    if (label) meta.append(el('span', 'row-date', label));
+    meta.append(el('span', 'badge cat', item.category));
+    if (item.tag) meta.append(el('span', 'badge tag', item.tag));
+    main.append(title, meta);
+    li.append(check, main);
+    return li;
+  }
+  function renderTodo() {
+    renderChips();
+    const s = settings(), t = today();
+    const g = groupItems(state.items, s, t, cat);
+    const list = $('todo-list');
+    const nodes = [...g.overdue, ...g.dated].map(i => row(i, s, t));
+    if (g.undated.length) {
+      nodes.push(el('li', 'group-head', '日付なし'));
+      for (const i of g.undated) nodes.push(row(i, s, t));
+    }
+    list.replaceChildren(...nodes);
+    $('todo-empty').hidden = nodes.length > 0;
+    const toggle = $('done-toggle');
+    toggle.textContent = '完了 ' + g.done.length;
+    toggle.setAttribute('aria-expanded', String(showDone));
+    toggle.hidden = g.done.length === 0;
+    const dl = $('done-list');
+    dl.hidden = !showDone || g.done.length === 0;
+    dl.replaceChildren(...(showDone ? g.done.map(i => row(i, s, t)) : []));
+  }
+  function toggleDone(id) {
+    const it = findItem(id);
+    if (!it || !store) return;
+    track(store.setDone(id, !it.done));
+  }
+
+  // ---- detail ----
+  function openDetail(id) { detailId = id; renderDetail(); $('detail').hidden = false; }
+  function closeDetail() { detailId = null; $('detail').hidden = true; }
+  function renderDetail(keepMemo) {
+    if (!detailId) return;
+    const it = findItem(detailId);
+    if (!it) { closeDetail(); return; }
+    const s = settings();
+    $('d-title').textContent = it.title;
+    const lab = dateLabel(it, s);
+    $('d-date').textContent = lab ? lab + (isOverdue(it, s, today()) ? '（期限切れ）' : '') : '日付なし';
+    const cond = conditionLabel(it, s);
+    $('d-cond').hidden = !cond; $('d-cond').textContent = cond;
+    $('d-rule').textContent = it.rule || '';
+    $('d-place').textContent = it.place || '－';
+    const docs = (it.documents || []).map(d => el('li', '', d));
+    $('d-docs').replaceChildren(...(docs.length ? docs : [el('li', 'muted', '－')]));
+    $('d-note').textContent = it.note || '';
+    if (!keepMemo) $('d-memo').value = it.memo || '';
+    const link = $('d-link');
+    if (it.sourceUrl && /^https:\/\//.test(it.sourceUrl)) { link.href = it.sourceUrl; link.hidden = false; }
+    else { link.hidden = true; link.removeAttribute('href'); }
+    $('d-done').textContent = it.done ? '完了を取り消す' : '完了にする';
+    $('d-done').setAttribute('aria-pressed', String(Boolean(it.done)));
+    $('d-done-by').textContent = doneLabel(it);
+  }
+
+  // ---- editor ----
+  function openEditor(id) {
+    editId = id || null;
+    const it = id ? findItem(id) : null;
+    $('e-heading').textContent = it ? '編集' : '追加';
+    $('e-category').replaceChildren(...CATEGORIES.map(c => { const o = el('option', '', c); o.value = c; return o; }));
+    $('e-title').value = it ? it.title : '';
+    $('e-category').value = it ? it.category : (cat !== 'すべて' ? cat : '準備');
+    $('e-date').value = it ? (itemDate(it, settings()) || '') : '';
+    $('e-place').value = it ? it.place || '' : '';
+    $('e-docs').value = it ? (it.documents || []).join('\n') : '';
+    $('e-memo').value = it ? it.memo || '' : '';
+    $('e-link').value = it ? it.sourceUrl || '' : '';
+    $('e-error').textContent = '';
+    $('editor').hidden = false;
+  }
+  function saveEditor() {
+    if (!store) return;
+    const it = editId ? findItem(editId) : null;
+    const date = $('e-date').value || '';
+    const auto = it ? computeDue(it.calc, settings()) : null;
+    const input = {
+      title: $('e-title').value,
+      category: $('e-category').value,
+      dateOverride: date === '' || date === auto ? null : date,
+      place: $('e-place').value,
+      documents: $('e-docs').value.split('\n'),
+      memo: $('e-memo').value,
+      sourceUrl: $('e-link').value
+    };
+    const res = it ? store.editItem(it.id, input) : store.addItem(input);
+    if (!res.ok) { $('e-error').textContent = res.errors[0]; return; }
+    track(res.write);
+    $('editor').hidden = true;
+    editId = null;
+  }
+
+  // ---- settings ----
+  function openSettings() {
+    const s = settings();
+    $('s-birth').value = s.birthDate || '';
+    $('s-due').textContent = '予定日 ' + formatShort(s.dueDate || DUE_DATE) + (s.birthDate ? '' : '（出生日が未入力なら予定日で計算）');
+    $('settings').hidden = false;
+  }
+  function saveBirth(value) {
+    if (!store) return;
+    const res = store.setBirthDate(value);
+    if (!res.ok) { toast('日付が正しくありません'); return; }
+    track(res.write);
+    $('settings').hidden = true;
+  }
+
+  // ---- photos ----
+  function renderPhotos() {
+    const grid = $('photo-grid');
+    grid.replaceChildren(...state.photos.map(p => {
+      const li = el('li', 'cell');
+      const b = el('button', 'thumb');
+      b.type = 'button';
+      b.setAttribute('aria-label', '写真を開く');
+      const img = el('img');
+      img.src = p.thumb; img.alt = '';
+      b.append(img);
+      b.onclick = () => openViewer(p.id);
+      li.append(b);
+      return li;
+    }));
+    $('photo-empty').hidden = state.photos.length > 0;
+  }
+  function photoBy(p) {
+    const at = toDate(p.addedAt);
+    return shortName(p.addedBy && p.addedBy.name) + 'さん' + (at ? ' ' + formatMD(at) : '');
+  }
+  function openViewer(id) {
+    const p = state.photos.find(x => x.id === id);
+    if (!p || !store) return;
+    viewerId = id;
+    $('v-img').src = p.thumb;
+    $('v-by').textContent = photoBy(p);
+    $('viewer').hidden = false;
+    store.loadFull(id).then(data => { if (viewerId === id && data) $('v-img').src = data; }).catch(() => {});
+  }
+  async function addPhotos(files) {
+    if (!store || !opts.preparePhoto) return;
+    const list = Array.from(files || []).slice(0, MAX_FILES);
+    const status = $('photo-status');
+    let failed = 0;
+    for (let i = 0; i < list.length; i++) {
+      status.textContent = '準備中 ' + (i + 1) + '/' + list.length;
+      try { track(store.addPhoto(await opts.preparePhoto(list[i])).write); } catch { failed++; }
+    }
+    status.textContent = failed ? failed + '枚は追加できませんでした' : '';
+  }
+
+  function renderTab() {
+    $('tab-todo').hidden = tab !== 'todo';
+    $('tab-photos').hidden = tab !== 'photos';
+    $('tab-btn-todo').setAttribute('aria-selected', String(tab === 'todo'));
+    $('tab-btn-photos').setAttribute('aria-selected', String(tab === 'photos'));
+  }
+
+  function render(next) {
+    if (next) state = next;
+    renderScreens();
+    renderPill();
+    if (state.auth !== 'ready') return;
+    renderTab();
+    renderTodo();
+    renderPhotos();
+    renderDetail(true);
+    if (viewerId && !state.photos.some(p => p.id === viewerId)) { viewerId = null; $('viewer').hidden = true; }
+    if (editId && !findItem(editId)) { editId = null; $('editor').hidden = true; }
+  }
+
+  // ---- wiring ----
+  $('login-btn').onclick = () => { if (store) { $('login-btn').disabled = true; store.signIn().finally(() => { $('login-btn').disabled = false; }); } };
+  $('gear').onclick = openSettings;
+  $('tab-btn-todo').onclick = () => { tab = 'todo'; renderTab(); };
+  $('tab-btn-photos').onclick = () => { tab = 'photos'; renderTab(); };
+  $('done-toggle').onclick = () => { showDone = !showDone; renderTodo(); };
+  $('add-btn').onclick = () => openEditor(null);
+  $('d-close').onclick = closeDetail;
+  $('d-done').onclick = () => { if (detailId) toggleDone(detailId); };
+  $('d-edit').onclick = () => { const id = detailId; closeDetail(); openEditor(id); };
+  $('d-delete').onclick = () => {
+    const it = findItem(detailId);
+    if (!it || !store || !confirmFn('「' + it.title + '」を削除しますか？')) return;
+    track(store.deleteItem(it.id));
+    closeDetail();
+  };
+  $('d-memo-save').onclick = () => {
+    const it = findItem(detailId);
+    if (!it || !store) return;
+    const res = store.setMemo(it.id, $('d-memo').value, it);
+    if (!res.ok) { toast(res.errors[0]); return; }
+    track(res.write);
+    toast('保存しました');
+  };
+  $('e-save').onclick = saveEditor;
+  $('e-cancel').onclick = () => { $('editor').hidden = true; editId = null; };
+  $('s-save').onclick = () => saveBirth($('s-birth').value || null);
+  $('s-clear').onclick = () => saveBirth(null);
+  $('s-close').onclick = () => { $('settings').hidden = true; };
+  $('s-logout').onclick = () => { $('settings').hidden = true; if (store) store.signOut().catch(() => {}); };
+  $('photo-input').onchange = () => { const input = $('photo-input'); const files = Array.from(input.files || []); input.value = ''; return addPhotos(files); };
+  $('v-close').onclick = () => { viewerId = null; $('viewer').hidden = true; };
+  $('v-delete').onclick = () => {
+    if (!viewerId || !store || !confirmFn('この写真を削除しますか？')) return;
+    track(store.deletePhoto(viewerId));
+    viewerId = null;
+    $('viewer').hidden = true;
+  };
+
+  render();
+  return {
+    attach(s) { store = s; return s.subscribe(render); },
+    render,
+    setOnline(v) { netOnline = v; renderPill(); },
+    toast,
+    get openDetailId() { return detailId; }
+  };
+}

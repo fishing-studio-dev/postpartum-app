@@ -1,81 +1,119 @@
 <!doctype html>
 <html lang="ja"><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types postpartum-r6-sw">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://apis.google.com; frame-src https://sango-app-a7e00.firebaseapp.com https://accounts.google.com https://apis.google.com; img-src 'self' data: blob:; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="referrer" content="no-referrer">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="color-scheme" content="light">
 <meta name="format-detection" content="telephone=no">
-<meta name="theme-color" content="#205e4d">
+<meta name="theme-color" content="#fff6ec">
 <meta name="application-name" content="産後アプリ">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="産後アプリ">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<title>産後アプリ R6</title>
+<title>産後アプリ</title>
 <link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./mascot.svg">
 <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-180.png">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<header class="safety" role="note" aria-label="大切なお知らせ"><ul>
-<li>データはこの端末だけに保存（送信しません）</li>
-<li>医療助言ではありません</li>
-<li>公式の日程は自治体・医療機関の案内で確認してください</li>
-</ul></header>
+<section id="loading" class="screen center">
+<img class="mascot-big bob" src="./mascot.svg" alt="" width="120" height="120">
+</section>
+
+<section id="login" class="screen center" hidden>
+<img class="mascot-big" src="./mascot.svg" alt="" width="140" height="140">
+<h1 class="app-title">産後アプリ</h1>
+<button id="login-btn" type="button" class="big">Googleでログイン</button>
+<p id="login-msg" class="login-msg" role="status" aria-live="polite"></p>
+</section>
+
+<div id="app" class="app" hidden>
+<header class="top">
+<img class="mascot-mini" src="./mascot.svg" alt="" width="32" height="32">
+<span class="top-title">産後アプリ</span>
+<button id="gear" type="button" class="icon-btn" aria-label="設定">⚙</button>
+</header>
+<p id="offline-pill" class="pill" role="status" hidden></p>
+<p id="toast" class="toast" role="status" aria-live="polite" hidden></p>
+
 <main>
-<div class="bar"><h1>産後アプリ <span class="badge">R6</span></h1><button id="settings-open" type="button" class="ghost">設定</button><button id="add" type="button">＋ 追加</button></div>
-<p id="offline-status" aria-live="polite"></p>
-<p id="message" role="status" aria-live="polite"></p>
-<button id="reload" type="button" class="attention" hidden>最新の内容を読み込む</button>
-<section id="soon" class="soon" aria-labelledby="soon-title">
-<h2 id="soon-title">近日</h2>
-<ul id="soon-list" class="soon-list"></ul>
-<button id="soon-toggle" type="button" class="link" hidden>すべて表示</button>
+<section id="tab-todo" class="tab">
+<h2 class="section-title">次にやること</h2>
+<div id="chips" class="chips" role="group" aria-label="分類"></div>
+<ul id="todo-list" class="list"></ul>
+<div id="todo-empty" class="empty" hidden><img class="mascot-mid" src="./mascot.svg" alt="" width="88" height="88"><p>やることはありません</p></div>
+<button id="done-toggle" type="button" class="soft-btn">完了</button>
+<ul id="done-list" class="list done-list" hidden></ul>
+<button id="add-btn" type="button" class="fab" aria-label="追加">＋</button>
 </section>
-<p id="period" class="period"></p>
-<div id="chips" class="chips" role="group" aria-label="分類で絞り込み"></div>
-<div class="filters"><label class="toggle"><input id="undone-only" type="checkbox"> 未完了のみ</label><span id="list-count" class="count"></span></div>
-<section id="empty" class="empty" hidden>
-<p>予定や「やること」を、自分で入力して管理します。右上の「＋ 追加」から、タイトル・分類・日付（なくてもよい）・メモを入れてください。</p>
-<p>試しに見てみたいときは、架空の例を入れられます（あとで削除できます）。</p>
-<button id="examples" type="button" class="ghost">架空の例を入れる</button>
+
+<section id="tab-photos" class="tab" hidden>
+<label class="big photo-add">写真を追加<input id="photo-input" class="visually-hidden" type="file" accept="image/*" multiple></label>
+<p id="photo-status" class="hint" role="status" aria-live="polite"></p>
+<ul id="photo-grid" class="grid"></ul>
+<div id="photo-empty" class="empty" hidden><img class="mascot-mid" src="./mascot.svg" alt="" width="88" height="88"><p>写真はまだありません</p></div>
 </section>
-<ul id="list" class="list" aria-label="項目の一覧"></ul>
-<footer>
-<p>入力した内容はどこにも送信しません。保存先は、この端末のこのブラウザー（またはホーム画面に追加したアプリ）の中だけです。別の端末とは同期されません。</p>
-<p>ブラウザーの履歴やサイトのデータを消す、アプリを削除する、端末を初期化する、といった操作で入力内容も消えます。iPhone では、Safari で開いた場合とホーム画面から開いた場合で保存先が別々です（どちらか一方に決めて使ってください）。Safari でしばらく開かないと、サイトのデータが消されることがあります。ホーム画面に追加して使うほうが消えにくくなります。</p>
-<p>大事な予定は、このアプリだけに頼らず、紙の手帳などにも控えてください。同じアドレス（ドメイン）にある別のページから保存内容を読まれる可能性があります。同じ端末を使う人から内容を隠す機能はありません。複数のタブで開くと、別のタブでの保存を検知して上書きを止めますが、同時操作を完全には防げません。</p>
-</footer>
-<noscript>このアプリはJavaScriptが必要です。</noscript>
 </main>
-<section id="editor" class="overlay" role="dialog" aria-modal="true" aria-labelledby="editor-title" hidden>
+
+<p class="foot">医療の判断は医療機関・自治体に確認してください</p>
+<nav class="tabs" aria-label="画面">
+<button id="tab-btn-todo" type="button" class="tab-btn" aria-selected="true">やること</button>
+<button id="tab-btn-photos" type="button" class="tab-btn" aria-selected="false">写真</button>
+</nav>
+</div>
+
+<section id="detail" class="overlay" role="dialog" aria-modal="true" aria-labelledby="d-title" hidden>
 <div class="sheet">
-<h2 id="editor-title">追加</h2>
-<label class="field">タイトル（必須・60文字まで）<input id="f-title" type="text" maxlength="60" autocomplete="off"></label>
-<label class="field">分類<select id="f-category"></select></label>
-<label class="field">日付（なくてもよい）<input id="f-date" type="date" min="1900-01-01" max="2199-12-31"></label>
-<label class="toggle"><input id="f-done" type="checkbox"> 完了</label>
-<label class="field">メモ（1000文字まで）<textarea id="f-memo" rows="3" maxlength="1000"></textarea></label>
-<fieldset class="checks"><legend>チェック項目 <span id="f-check-count"></span></legend>
-<ul id="f-check-list" class="check-list"></ul>
-<div class="check-add"><input id="f-check-text" type="text" maxlength="60" autocomplete="off" aria-label="追加するチェック項目"><button id="f-check-add" type="button" class="ghost">追加</button></div>
-</fieldset>
-<p id="f-error" class="error" aria-live="assertive"></p>
-<div class="sheet-actions"><button id="f-save" type="button">保存</button><button id="f-cancel" type="button" class="ghost">閉じる</button><button id="f-delete" type="button" class="danger">削除</button></div>
+<h2 id="d-title" class="sheet-title"></h2>
+<p id="d-date" class="d-date"></p>
+<p id="d-cond" class="d-cond" hidden></p>
+<p id="d-rule" class="small"></p>
+<div class="d-block"><h3>場所</h3><p id="d-place"></p></div>
+<div class="d-block"><h3>持ち物・書類</h3><ul id="d-docs" class="docs"></ul></div>
+<p id="d-note" class="small"></p>
+<div class="d-block"><h3>メモ</h3><textarea id="d-memo" rows="3" maxlength="2000" aria-label="メモ"></textarea><button id="d-memo-save" type="button" class="soft-btn">メモを保存</button></div>
+<a id="d-link" class="link-btn" target="_blank" rel="noopener noreferrer" hidden>公式リンク</a>
+<button id="d-done" type="button" class="big">完了にする</button>
+<p id="d-done-by" class="small center-text"></p>
+<div class="row-actions"><button id="d-edit" type="button" class="soft-btn">編集</button><button id="d-delete" type="button" class="soft-btn danger">削除</button><button id="d-close" type="button" class="soft-btn">閉じる</button></div>
 </div>
 </section>
-<section id="settings" class="overlay" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+
+<section id="editor" class="overlay" role="dialog" aria-modal="true" aria-labelledby="e-heading" hidden>
 <div class="sheet">
-<h2 id="settings-title">設定</h2>
-<label class="field">出産日（なくてもよい）<input id="s-birth" type="date" min="1900-01-01" max="2199-12-31"></label>
-<p class="hint">設定すると、出産日から約6か月（182日を足した日）までを目安の期間として表示し、期間の外の日付に「期間外」と表示します。単純な日付の計算で、医療的な意味はありません。</p>
-<div class="sheet-actions"><button id="s-birth-save" type="button">出産日を保存</button><button id="s-birth-clear" type="button" class="ghost">出産日を消す</button></div>
-<p class="hint">「すべて削除」は、この端末に保存したすべての項目と出産日を消します。元に戻せません。</p>
-<div class="sheet-actions"><button id="s-clear-all" type="button" class="danger">すべて削除</button><button id="s-close" type="button" class="ghost">閉じる</button></div>
+<h2 id="e-heading" class="sheet-title">追加</h2>
+<label class="field">タイトル<input id="e-title" type="text" maxlength="80" autocomplete="off"></label>
+<label class="field">日付<input id="e-date" type="date" min="2025-01-01" max="2030-12-31"></label>
+<label class="field">分類<select id="e-category"></select></label>
+<label class="field">場所<input id="e-place" type="text" maxlength="200" autocomplete="off"></label>
+<label class="field">持ち物・書類（1行に1つ）<textarea id="e-docs" rows="3"></textarea></label>
+<label class="field">メモ<textarea id="e-memo" rows="3" maxlength="2000"></textarea></label>
+<label class="field">リンク<input id="e-link" type="url" inputmode="url" maxlength="500" autocomplete="off" placeholder="https://"></label>
+<p id="e-error" class="error" role="alert"></p>
+<div class="row-actions"><button id="e-save" type="button" class="big">保存</button><button id="e-cancel" type="button" class="soft-btn">やめる</button></div>
 </div>
 </section>
-<script src="./offline.js"></script>
-<script src="./ui.js"></script>
-<script src="./app.js"></script>
+
+<section id="settings" class="overlay" role="dialog" aria-modal="true" aria-labelledby="s-heading" hidden>
+<div class="sheet">
+<h2 id="s-heading" class="sheet-title">設定</h2>
+<label class="field">出生日<input id="s-birth" type="date" min="2025-01-01" max="2028-12-31"></label>
+<p id="s-due" class="small"></p>
+<div class="row-actions"><button id="s-save" type="button" class="big">保存</button><button id="s-clear" type="button" class="soft-btn">予定日で計算</button></div>
+<div class="row-actions"><button id="s-logout" type="button" class="soft-btn">ログアウト</button><button id="s-close" type="button" class="soft-btn">閉じる</button></div>
+</div>
+</section>
+
+<section id="viewer" class="overlay" role="dialog" aria-modal="true" aria-label="写真" hidden>
+<div class="sheet">
+<img id="v-img" class="viewer-img" alt="写真">
+<p id="v-by" class="small center-text"></p>
+<div class="row-actions"><button id="v-delete" type="button" class="soft-btn danger">削除</button><button id="v-close" type="button" class="soft-btn">閉じる</button></div>
+</div>
+</section>
+<script src="./firebase-config.js"></script>
+<script type="module" src="./app.js"></script>
 </body></html>

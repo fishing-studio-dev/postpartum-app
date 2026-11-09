@@ -1,19 +1,26 @@
-/* R6 service worker. Caches every file of this app (relative paths only, so it works
-   under a sub-path such as /repo-name/). Handles only same-origin GET requests inside
-   its own scope. Never contacts any other origin. Does not store user data. */
+/* R7 service worker. アプリのファイル（相対パス）と、firebase-config.js で固定した
+   Firebase SDK の3ファイルだけをキャッシュする。Firestore / Auth / googleapis への通信と
+   GET 以外のリクエストには一切さわらない。利用者のデータは保存しない。 */
 'use strict';
-const VERSION = 'r6-2026-11-09-1';
-const PREFIX = 'postpartum-r6-';
-// R6 replaces R5 at the same address, so the R5 file caches are no longer needed.
-const LEGACY_PREFIX = 'postpartum-r5-';
+importScripts('./firebase-config.js');
+const VERSION = 'r7-2026-11-09-1';
+const PREFIX = 'postpartum-r7-';
+const LEGACY_PREFIXES = ['postpartum-r6-', 'postpartum-r5-'];
 const CACHE = PREFIX + VERSION;
+const SDK_URLS = self.SANGO_FIREBASE.sdkUrls.slice();
 const FILES = [
   './',
   './index.html',
-  './offline.js',
-  './ui.js',
+  './firebase-config.js',
   './app.js',
+  './data.js',
+  './logic.js',
+  './seed-data.js',
+  './photo.js',
+  './ui.js',
+  './offline.js',
   './style.css',
+  './mascot.svg',
   './manifest.webmanifest',
   './sw.js',
   './icons/icon-192.png',
@@ -28,16 +35,20 @@ function clean(response) {
   if (!response || !response.redirected) return response;
   return response.blob().then(body => new Response(body, {status: response.status, statusText: response.statusText, headers: response.headers}));
 }
+// SDK は取れなくてもインストールは成功させる（アプリの画面だけは開けるように）。
+function cacheSdk(cache) {
+  return Promise.all(SDK_URLS.map(url => fetch(new Request(url, {mode: 'cors', credentials: 'omit'}))
+    .then(res => (res && res.ok ? cache.put(url, res) : undefined))
+    .catch(() => undefined)));
+}
 
 self.addEventListener('install', event => {
-  // New versions wait until every open window of the old version is closed,
-  // so a page never mixes files from two versions.
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(FILES.map(path => new Request(path, {cache: 'reload'})))));
+  event.waitUntil(caches.open(CACHE).then(cache =>
+    cache.addAll(FILES.map(path => new Request(path, {cache: 'reload'}))).then(() => cacheSdk(cache))));
 });
 
 self.addEventListener('activate', event => {
-  // Remove older R6 caches and the legacy R5 caches; other apps on the same origin are left alone.
-  const old = key => (key.startsWith(PREFIX) && key !== CACHE) || key.startsWith(LEGACY_PREFIX);
+  const old = key => (key.startsWith(PREFIX) && key !== CACHE) || LEGACY_PREFIXES.some(p => key.startsWith(p));
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(keys.filter(old).map(key => caches.delete(key))))
@@ -49,10 +60,15 @@ self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
+  if (SDK_URLS.includes(url.href)) {
+    event.respondWith(caches.open(CACHE).then(cache => cache.match(url.href).then(hit => hit || fetch(request).then(res => {
+      if (res && res.ok) cache.put(url.href, res.clone());
+      return res;
+    }))));
+    return;
+  }
   if (url.origin !== self.location.origin || !url.href.startsWith(SCOPE)) return;
   const navigate = request.mode === 'navigate';
-  // Cache first. A page navigation not in the list (e.g. ./?source=x or an unknown path)
-  // falls back to the cached index.html. Only a cache miss goes to the same origin.
   event.respondWith(caches.open(CACHE)
     .then(cache => cache.match(request, {ignoreSearch: true}).then(hit => hit || (navigate ? cache.match(INDEX) : undefined)))
     .then(hit => hit ? (navigate ? clean(hit) : hit) : fetch(request)));

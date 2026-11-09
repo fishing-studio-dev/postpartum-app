@@ -1,9 +1,12 @@
-// 今日のことば。名前は入れない（{wife} {husband} {big} {baby} {daytext} は表示するときに差し込む）。
-// 医療の助言は入れない。日付ごとに決まった順番（固定の並べかえ）で1つ選ぶ。
-import {parseDate} from './logic.js';
+// 今日のことば（妻）／今日の気づかい（夫）。名前は入れない（{wife} {husband} {big} {baby} {daytext} は表示するときに差し込む）。
+// 医療の助言は入れない。送り主は付けない。日付ごとに決まった順番（固定の並べかえ）で1つ選ぶ。
+// R9：R8 のことばに、オーナーの資料「明るい言葉210文」（words-210.js）を足している。
+import {parseDate, DUE_DATE} from './logic.js';
+import {PRE_BIRTH_WORDS, WIFE_210, HUSBAND_210} from './words-210.js';
 
-// 妻（ママ）に向けた、ねぎらいと感謝のことば
-export const WIFE_WORDS = Object.freeze([
+export {PRE_BIRTH_WORDS};
+// 妻（ママ）に向けた、ねぎらいと感謝のことば（R8）
+export const R8_WIFE_WORDS = Object.freeze([
   '今日もほんとうにおつかれさま。',
   'いつもありがとう。そばにいてくれるだけで、家があったかいよ。',
   'ちゃんとできてるよ。だいじょうぶ。',
@@ -50,7 +53,7 @@ export const WIFE_WORDS = Object.freeze([
   '無理に笑わなくていいよ。そのままでいい。',
   '泣きたい日があっても、それでいいんだよ。',
   '世界一のチーム、今日もおつかれさま。',
-  '{husband}より：いつもありがとう。',
+  '{husband}と{baby}と、今日もいっしょに笑えたらいいな。',
   'ありがとうの気持ち、今日も100こ分。',
   'お世話のプロだね。ひと休みするのも、プロの仕事だよ。',
   'あなたの手は、魔法の手だね。',
@@ -104,8 +107,8 @@ export const WIFE_WORDS = Object.freeze([
   'ソファでぼんやりする時間も、大切な時間だよ。'
 ]);
 
-// 夫（パパ）に向けた「こんな気遣いをしてあげたら？」
-export const HUSBAND_WORDS = Object.freeze([
+// 夫（パパ）に向けた「こんな気遣いをしてあげたら？」（R8）
+export const R8_HUSBAND_WORDS = Object.freeze([
   '今日は{wife}に「いつもありがとう」と声に出して言ってみよう。',
   '温かい飲み物を、そっと置いてみては？',
   '洗い物、何も言わずに片づけてみよう。',
@@ -145,7 +148,7 @@ export const HUSBAND_WORDS = Object.freeze([
   'ほめ言葉はけちらない。今日は3回ほめてみよう。',
   '帰り道に「何か買って帰るものある？」と連絡しよう。',
   '{big}といっしょに、{wife}へのありがとうカードを作ろう。',
-  '「ぼくがやるよ」を、今日は先に言おう。',
+  '「それ、やっておくよ」を、今日は先に言おう。',
   '{wife}の髪をかわかしてあげるのも、すてきな気遣い。',
   '洗面所のタオル、新しいのに替えておこう。',
   '{baby}を抱っこして、{wife}の両手が空く時間を。',
@@ -208,7 +211,20 @@ export const HUSBAND_WORDS = Object.freeze([
   '「今日のごはん、おいしかった」を忘れずに。'
 ]);
 
-export const POOLS = Object.freeze({wife: WIFE_WORDS, husband: HUSBAND_WORDS});
+// 産後の妻へ（R8 + 資料100文）、夫へ（R8 + 資料100文）。
+export const WIFE_WORDS = Object.freeze([...R8_WIFE_WORDS, ...WIFE_210]);
+export const HUSBAND_WORDS = Object.freeze([...R8_HUSBAND_WORDS, ...HUSBAND_210]);
+export const POOLS = Object.freeze({wife: WIFE_WORDS, husband: HUSBAND_WORDS, prebirth: PRE_BIRTH_WORDS});
+export const WORD_TITLE = Object.freeze({wife: '今日のことば', husband: '今日の気づかい'});
+// 出産前の妻へは、出生日が未入力で、まだ予定日を過ぎていない間だけ使う（生まれた後に「もうすぐ」と出さないため）。
+export function wordPool(role, settings, today) {
+  if (role === 'husband') return 'husband';
+  if (role !== 'wife') return null;
+  const s = settings || {};
+  const born = typeof s.birthDate === 'string' && s.birthDate !== '';
+  const due = typeof s.dueDate === 'string' && s.dueDate ? s.dueDate : DUE_DATE;
+  return !born && typeof today === 'string' && today <= due ? 'prebirth' : 'wife';
+}
 
 function gcd(a, b) { while (b) [a, b] = [b, a % b]; return a; }
 // 固定の並べかえ：i → (a·i + c) mod n（a と n は互いに素なので必ず1対1）。

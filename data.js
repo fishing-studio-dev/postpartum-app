@@ -4,7 +4,8 @@
 //   deps.fs                         : firebase-firestore.js の関数
 //   deps.hashFn, deps.newId         : 省略可
 //   deps.isStandalone               : 省略可。ホーム画面アプリとして開いているか
-import {DUE_DATE, SEED_VERSION, isAllowedUser, sha256Hex, validateItem, validateBirth, validatePlan, validateFamily, buildSeed, newId as defaultNewId, shortName} from './logic.js';
+import {DUE_DATE, SEED_VERSION, isAllowedUser, sha256Hex, validateItem, validateBirth, validatePlan, validateFamily, buildSeed, newId as defaultNewId, shortName, planOf as planOfItem} from './logic.js';
+import {cleanPrefs} from './prefs.js';
 import {SEED_ITEMS} from './seed-data.js';
 import {SEED_V2_ITEMS} from './seed-v2.js';
 
@@ -20,7 +21,7 @@ export function createStore(deps) {
   const hashFn = deps.hashFn || sha256Hex;
   const makeId = deps.newId || (() => defaultNewId());
   const standalone = deps.isStandalone || (() => false);
-  let state = {auth: 'loading', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], fromCache: false, error: ''};
+  let state = {auth: 'loading', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], prefs: null, fromCache: false, error: ''};
   let user = null;
   let unsubs = [];
   let denied = false;
@@ -53,6 +54,12 @@ export function createStore(deps) {
       photos.sort((a, b) => time(b.addedAt) - time(a.addedAt) || (a.id < b.id ? -1 : 1));
       set({photos, fromCache: cacheFlag(snap)});
     }, onErr));
+    // R9: 自分だけの設定（キャラクター・動き）。文書が無くてもよい（既定値を使う）。
+    if (state.myHash) {
+      unsubs.push(F.onSnapshot(ref('prefs', state.myHash), snap => {
+        set({prefs: snap.exists() ? cleanPrefs(readData(snap)) : {}});
+      }, () => set({prefs: state.prefs || {}})));
+    }
   }
 
   // 最初の項目づくりと、版ごとの追加（移行）。トランザクションの中で行う（2人同時でも安全）。
@@ -85,7 +92,7 @@ export function createStore(deps) {
     if (!u) {
       user = null;
       stopWatching();
-      set({auth: denied ? 'denied' : 'signedOut', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: []});
+      set({auth: denied ? 'denied' : 'signedOut', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], prefs: null});
       return;
     }
     let ok = false;
@@ -95,7 +102,7 @@ export function createStore(deps) {
       denied = true;
       user = null;
       stopWatching();
-      set({auth: 'denied', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: []});
+      set({auth: 'denied', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], prefs: null});
       try { await A.signOut(auth); } catch { /* ignore */ }
       return;
     }
@@ -175,6 +182,30 @@ export function createStore(deps) {
     need();
     return {ok: true, write: F.updateDoc(ref('items', id), {memo: v.value.memo, ...stamp()})};
   }
+  // R9: 詳細の「保存」。メモと いつ・誰が のうち、変わったものだけを1回の update で書く（済み・期限などには触れない）。
+  // current: 今の項目（変わったかどうかの比較用）。何も変わっていなければ書かない。
+  function saveDetail(id, input, current) {
+    const cur = current || {};
+    const v = validateItem({...cur, title: cur.title || 'x', category: cur.category || '準備', memo: input.memo});
+    const p = validatePlan(input);
+    const errors = [...v.errors.filter(e => /メモ/.test(e)), ...p.errors];
+    if (errors.length) return {ok: false, errors};
+    need();
+    const before = planOfItem(cur);
+    const patch = {};
+    if ((cur.memo || '') !== v.value.memo) patch.memo = v.value.memo;
+    for (const k of ['planDate', 'planTime', 'assignee']) if (before[k] !== p.value[k]) patch[k] = p.value[k];
+    if (!Object.keys(patch).length) return {ok: true, unchanged: true, write: Promise.resolve()};
+    return {ok: true, unchanged: false, fields: Object.keys(patch), write: F.updateDoc(ref('items', id), {...patch, ...stamp()})};
+  }
+  // R9: 自分だけの設定。prefs/{sha256(小文字メール)} に merge で書く。meta/* には書かない。
+  function setPrefs(patch) {
+    need();
+    const clean = cleanPrefs(patch);
+    if (!Object.keys(clean).length) return {ok: false, errors: ['うまくいきませんでした']};
+    if (!state.myHash) return {ok: false, errors: ['うまくいきませんでした']};
+    return {ok: true, write: F.setDoc(ref('prefs', state.myHash), {...clean, ...stamp()}, {merge: true})};
+  }
   function deleteItem(id) { need(); return F.deleteDoc(ref('items', id)); }
   // 出生日と時刻。meta/settings のほかの値（seedVersion など）は残す（merge）。
   function setBirth(date, timeText, today) {
@@ -216,7 +247,7 @@ export function createStore(deps) {
   }
 
   return {
-    start, signIn, signOut, ensureSeeded, setDone, addItem, editItem, setPlan, setMemo, deleteItem, setBirth, setBirthDate, saveFamily,
+    start, signIn, signOut, ensureSeeded, setDone, addItem, editItem, setPlan, setMemo, saveDetail, setPrefs, deleteItem, setBirth, setBirthDate, saveFamily,
     addPhoto, deletePhoto, loadFull,
     subscribe(fn) { listeners.add(fn); fn(state); return () => listeners.delete(fn); },
     get state() { return state; }

@@ -46,6 +46,11 @@ export async function boot(win, loadModule = url => import(url)) {
   const ui = mountUI(doc, {
     confirm: text => win.confirm(text),
     setTimeout: (fn, ms) => win.setTimeout(fn, ms),
+    clearTimeout: t => (typeof win.clearTimeout === 'function' ? win.clearTimeout(t) : undefined),
+    // R9: キャラクターの動き（OS の「動きを減らす」・画面外）。無い端末では使わない。
+    matchMedia: typeof win.matchMedia === 'function' ? q => win.matchMedia(q) : undefined,
+    IntersectionObserver: typeof win.IntersectionObserver === 'function' ? win.IntersectionObserver : undefined,
+    clock: () => Date.now(),
     now: () => new Date(),
     today: () => todayLocal(new Date()),
     isOnline: () => isOnline(win),

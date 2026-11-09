@@ -2,6 +2,7 @@
 // history と各コールバックは外から渡す（テストでは偽物）。
 //   画面（パネル）を開く → pushState。戻る → いちばん上のパネルを閉じる。
 //   ホームで戻る → 「アプリを閉じますか？」。もどる → ガードを積み直す。閉じる → history.back() を1回だけ。
+//   R9: 保存していない入力があるパネルは、onBack が false を返して閉じるのを止められる（確認の画面を出すため）。
 export function createBackGuard({history, onBack, onExitAsk} = {}) {
   const has = Boolean(history && typeof history.pushState === 'function' && typeof history.back === 'function');
   const stack = [];
@@ -40,8 +41,13 @@ export function createBackGuard({history, onBack, onExitAsk} = {}) {
     if (leaving) return 'leaving';
     if (ignore > 0) { ignore--; return 'ignored'; }
     if (stack.length) {
-      const name = stack.pop();
-      if (onBack) onBack(name);
+      const name = stack[stack.length - 1];
+      // R9: onBack が false を返したら（保存していない入力がある）閉じない。履歴を積み直してパネルを残す。
+      if (onBack && onBack(name) === false) {
+        push({sango: 'panel', name});
+        return 'kept';
+      }
+      stack.pop();
       return 'closed';
     }
     if (asking) return 'asking';

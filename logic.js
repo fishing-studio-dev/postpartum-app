@@ -378,3 +378,118 @@ export function wordContext(family, settings, today) {
     daytext: n ? '生まれて' + n + '日目。' : ''
   };
 }
+
+// ==== R9（5つのタブ） ====
+// 予定日（planDate：利用者が決める）と期限（itemDate：参照する情報）は、いつも別の言葉で表示する。
+export function deadlineLabel(item, settings) {
+  const d = itemDate(item, settings);
+  if (!d) return '';
+  return dateKind(item) === 'from' ? '開始 ' + formatShort(d) + 'から' : '締切 ' + formatShort(d) + 'まで';
+}
+export function planWhenLabel(item) {
+  const p = planOf(item);
+  if (!p.planDate) return '予定 未定';
+  return '予定 ' + formatShort(p.planDate) + ' ' + (p.planTime || '時刻未定');
+}
+export function assigneeText(item, family) {
+  const a = assigneeLabel(planOf(item).assignee, family);
+  return '担当 ' + (a || '未定');
+}
+export const stateText = item => (item && item.done ? '済み' : '未完了');
+
+const byDateTime = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) || ((a.time || '99') < (b.time || '99') ? -1 : (a.time || '99') > (b.time || '99') ? 1 : 0) || tie(a.item, b.item);
+
+// きょう：今日・明日・もうすぐ（3日以内）。予定日があればその日、無ければ期限の日。済みも「済み」として出す。
+export const SOON_AHEAD = 3;
+export function todayGroups(items, settings, today) {
+  const out = {today: [], tomorrow: [], soon: []};
+  if (!isValidDate(today)) return out;
+  const t1 = addDays(today, 1), t3 = addDays(today, SOON_AHEAD);
+  for (const it of items || []) {
+    if (!it) continue;
+    const p = planOf(it);
+    const date = p.planDate || itemDate(it, settings);
+    if (!date || date < today || date > t3) continue;
+    const e = {item: it, date, time: p.planDate ? p.planTime : null, planned: Boolean(p.planDate)};
+    (date === today ? out.today : date === t1 ? out.tomorrow : out.soon).push(e);
+  }
+  for (const k of Object.keys(out)) out[k].sort(byDateTime);
+  return out;
+}
+
+// きょうの「確認が必要なこと」：締切を過ぎた未完了、締切が近い（3日以内）未完了。開始日（から）は含めない。
+export function attentionItems(items, settings, today) {
+  const overdue = [], soon = [];
+  if (!isValidDate(today)) return [];
+  const t3 = addDays(today, SOON_AHEAD);
+  for (const it of items || []) {
+    if (!it || it.done || dateKind(it) === 'from') continue;
+    const d = itemDate(it, settings);
+    if (!d) continue;
+    if (d < today) overdue.push({item: it, kind: 'overdue', date: d});
+    else if (d <= t3) soon.push({item: it, kind: 'soon', date: d});
+  }
+  const by = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : tie(a.item, b.item));
+  return [...overdue.sort(by), ...soon.sort(by)];
+}
+
+// 1週間
+export function weekDays(start) { return isValidDate(start) ? Array.from({length: 7}, (_, i) => addDays(start, i)) : []; }
+export const WEEKDAY = d => WEEK[weekday(d)];
+export const ASSIGNEE_FILTERS = ['husband', 'wife', 'both'];
+// 選んだ日：予定日がその日の項目（時刻あり／時刻未定）と、予定日が無く期限がその日の項目（締切。予定には見せない）。
+// filter: 'husband' | 'wife' | 'both' | null（担当がちょうどその値の項目だけ）
+export function dayEntries(items, settings, date, filter = null) {
+  const timed = [], untimed = [], deadlines = [];
+  for (const it of items || []) {
+    if (!it) continue;
+    const p = planOf(it);
+    if (filter && p.assignee !== filter) continue;
+    if (p.planDate === date) (p.planTime ? timed : untimed).push({item: it, date, time: p.planTime});
+    else if (!p.planDate && itemDate(it, settings) === date) deadlines.push({item: it, date, time: null, kind: dateKind(it)});
+  }
+  timed.sort(byDateTime); untimed.sort(byDateTime); deadlines.sort(byDateTime);
+  return {timed, untimed, deadlines, count: timed.length + untimed.length + deadlines.length};
+}
+
+// まだ未定：未完了 かつ（予定日が無い または 担当が無い）。1項目1行。時刻だけ未定は含めない。
+export const REASON_TEXT = Object.freeze({date: '日付を決める', assignee: '担当を決める', both: '両方を決める'});
+export function undecidedReason(item) {
+  const p = planOf(item);
+  if (!p.planDate && !p.assignee) return 'both';
+  if (!p.planDate) return 'date';
+  if (!p.assignee) return 'assignee';
+  return null;
+}
+// 並び：期限のあるもの（近い順）→ 期限の無いもの。
+export function undecidedItems(items, settings) {
+  const withDue = [], noDue = [];
+  for (const it of items || []) {
+    if (!it || it.done) continue;
+    const reason = undecidedReason(it);
+    if (!reason) continue;
+    const due = itemDate(it, settings);
+    (due ? withDue : noDue).push({item: it, reason, due});
+  }
+  withDue.sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : tie(a.item, b.item)));
+  noDue.sort((a, b) => tie(a.item, b.item));
+  return [...withDue, ...noDue];
+}
+
+// やること：時期ごとのまとまり＋「全件／未完了／済み」。view: 'all' | 'open' | 'done'
+export const TODO_VIEWS = ['all', 'open', 'done'];
+export function todoSections(items, settings, today, opts = {}) {
+  const s = sectionItems(items, settings, today, opts);
+  const view = TODO_VIEWS.includes(opts.view) ? opts.view : 'all';
+  const near = [...s.overdue, ...s.soon];
+  const out = {
+    near: view === 'done' ? [] : near,
+    later: view === 'done' ? [] : s.later,
+    undated: view === 'done' ? [] : s.undated,
+    done: view === 'open' ? [] : s.done,
+    overdueIds: new Set(s.overdue.map(i => i.id))
+  };
+  out.total = out.near.length + out.later.length + out.undated.length + out.done.length;
+  return out;
+}
+export const PERIOD_TEXT = Object.freeze({near: '期限切れ・2週間以内', later: '先の予定', undated: '日付なし', done: '済み'});

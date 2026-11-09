@@ -1,14 +1,17 @@
-/* R5 service worker. Caches every file of this app (relative paths only, so it works
+/* R6 service worker. Caches every file of this app (relative paths only, so it works
    under a sub-path such as /repo-name/). Handles only same-origin GET requests inside
    its own scope. Never contacts any other origin. Does not store user data. */
 'use strict';
-const VERSION = 'r5-2026-11-09-1';
-const PREFIX = 'postpartum-r5-';
+const VERSION = 'r6-2026-11-09-1';
+const PREFIX = 'postpartum-r6-';
+// R6 replaces R5 at the same address, so the R5 file caches are no longer needed.
+const LEGACY_PREFIX = 'postpartum-r5-';
 const CACHE = PREFIX + VERSION;
 const FILES = [
   './',
   './index.html',
   './offline.js',
+  './ui.js',
   './app.js',
   './style.css',
   './manifest.webmanifest',
@@ -33,10 +36,11 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('activate', event => {
-  // Remove only older caches of this app; other apps on the same origin are left alone.
+  // Remove older R6 caches and the legacy R5 caches; other apps on the same origin are left alone.
+  const old = key => (key.startsWith(PREFIX) && key !== CACHE) || key.startsWith(LEGACY_PREFIX);
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(key => key.startsWith(PREFIX) && key !== CACHE).map(key => caches.delete(key))))
+      .then(keys => Promise.all(keys.filter(old).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });

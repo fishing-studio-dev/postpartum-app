@@ -207,3 +207,174 @@ export function newId(rand = globalThis.crypto) {
   rand.getRandomValues(b);
   return 'c' + Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
 }
+
+// ==== R8 ====
+export const SEED_VERSION = 2;
+export const ASSIGNEES = ['husband', 'wife', 'both'];
+export const ROLES = ['husband', 'wife'];
+export const NAME_MAX = 20;
+export const NOTE_MAX = 30;
+
+export function formatMonthDay(s) { const p = parseDate(s); return p ? p.m + '/' + p.d : ''; }
+export function isValidTime(t) { return typeof t === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t); }
+export function daysBetween(a, b) { return Math.round((toUTC(b) - toUTC(a)) / 86400000); }
+
+// ---- 予定（いつ・誰が） ----
+// planDate 'YYYY-MM-DD' | null, planTime 'HH:MM' | null（日付があるときだけ）, assignee 'husband'|'wife'|'both'|null
+export function validatePlan(input) {
+  const v = input || {};
+  const errors = [];
+  const planDate = v.planDate === '' || v.planDate == null ? null : v.planDate;
+  const planTime = v.planTime === '' || v.planTime == null ? null : v.planTime;
+  const assignee = v.assignee === '' || v.assignee == null ? null : v.assignee;
+  if (planDate !== null && (!isValidDate(planDate) || planDate < '2025-01-01' || planDate > '2030-12-31')) errors.push('日付が正しくありません');
+  if (planTime !== null && !isValidTime(planTime)) errors.push('時刻が正しくありません');
+  if (planTime !== null && planDate === null) errors.push('時刻は日付といっしょに入れてください');
+  if (assignee !== null && !ASSIGNEES.includes(assignee)) errors.push('誰がを選んでください');
+  return {ok: errors.length === 0, errors, value: {planDate, planTime, assignee}};
+}
+// 古い（R7の）項目には planDate などが無い → null として扱う。
+export function planOf(item) {
+  const it = item || {};
+  return {
+    planDate: isValidDate(it.planDate) ? it.planDate : null,
+    planTime: isValidDate(it.planDate) && isValidTime(it.planTime) ? it.planTime : null,
+    assignee: ASSIGNEES.includes(it.assignee) ? it.assignee : null
+  };
+}
+export function cleanName(s) { return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f{}]/g, '').trim(); }
+export function assigneeLabel(assignee, family) {
+  const f = family || {};
+  if (assignee === 'husband') return cleanName(f.husbandName) || '夫';
+  if (assignee === 'wife') return cleanName(f.wifeName) || '妻';
+  if (assignee === 'both') return '2人';
+  return '';
+}
+// 例:「11/20(金) 10:00・{夫の名前}」（名前が無ければ 夫／妻／2人）
+export function planLabel(item, family) {
+  const p = planOf(item);
+  const when = p.planDate ? formatShort(p.planDate) + (p.planTime ? ' ' + p.planTime : '') : '';
+  const who = assigneeLabel(p.assignee, family);
+  return [when, who].filter(Boolean).join('・');
+}
+// 予定日（planDate）があればそれ、無ければ期限。
+export function effectiveDate(item, settings) { return planOf(item).planDate || itemDate(item, settings); }
+
+// ---- 今日・明日・もうすぐ ----
+export function upcoming(items, settings, today) {
+  const out = {overdue: [], today: [], tomorrow: [], soon: []};
+  if (!isValidDate(today)) return out;
+  const t1 = addDays(today, 1), t3 = addDays(today, 3);
+  for (const it of items || []) {
+    if (!it || it.done) continue;
+    const p = planOf(it);
+    const d = p.planDate || itemDate(it, settings);
+    if (!d) continue;
+    const entry = {id: it.id, title: it.title, date: d, time: p.planTime, assignee: p.assignee, planned: Boolean(p.planDate),
+      kind: p.planDate ? 'plan' : dateKind(it)};
+    if (d < today) { if (p.planDate || dateKind(it) !== 'from') out.overdue.push(entry); }
+    else if (d === today) out.today.push(entry);
+    else if (d === t1) out.tomorrow.push(entry);
+    else if (d <= t3) out.soon.push(entry);
+  }
+  const by = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || '99') < (b.time || '99') ? -1 : (a.time || '99') > (b.time || '99') ? 1 : a.id < b.id ? -1 : 1);
+  for (const k of Object.keys(out)) out[k].sort(by);
+  return out;
+}
+
+// ---- 一覧（さがす・グループ） ----
+const norm = s => String(s == null ? '' : s).normalize('NFKC').toLowerCase();
+export function matchesQuery(item, query) {
+  const q = norm(query).trim();
+  if (!q) return true;
+  const it = item || {};
+  const hay = norm([it.title, it.place, it.memo, it.note, it.rule, it.category, it.tag, ...(it.documents || [])].join('\n'));
+  return q.split(/\s+/).every(w => hay.includes(w));
+}
+export const SOON_DAYS = 14;
+// overdue / soon（14日以内） / later / undated / done
+export function sectionItems(items, settings, today, opts = {}) {
+  const category = opts.category || 'すべて';
+  const list = (items || []).filter(it => (category === 'すべて' || it.category === category) && matchesQuery(it, opts.query));
+  const out = {overdue: [], soon: [], later: [], undated: [], done: []};
+  const limit = isValidDate(today) ? addDays(today, SOON_DAYS) : '';
+  const sortDate = it => itemDate(it, settings) || planOf(it).planDate;
+  for (const it of list) {
+    if (it.done) out.done.push(it);
+    else if (isOverdue(it, settings, today)) out.overdue.push(it);
+    else if (sortDate(it)) (sortDate(it) <= limit ? out.soon : out.later).push(it);
+    else out.undated.push(it);
+  }
+  const byDate = (a, b) => { const x = sortDate(a), y = sortDate(b); return x < y ? -1 : x > y ? 1 : tie(a, b); };
+  out.overdue.sort(byDate); out.soon.sort(byDate); out.later.sort(byDate);
+  out.undated.sort((a, b) => catIndex(a.category) - catIndex(b.category) || tie(a, b));
+  out.done.sort((a, b) => doneTime(b) - doneTime(a) || tie(a, b));
+  return out;
+}
+
+// ---- 出生 ----
+// 生まれた日を1日目として数える。今日が出生日より前なら null。
+export function birthDayNumber(birthDate, today) {
+  if (!isValidDate(birthDate) || !isValidDate(today)) return null;
+  const n = daysBetween(birthDate, today) + 1;
+  return n >= 1 ? n : null;
+}
+export function validateBirth(date, time, today) {
+  const errors = [];
+  const d = date === '' || date == null ? null : date;
+  const t = time === '' || time == null ? null : time;
+  if (d === null) return {ok: t === null, errors: t === null ? [] : ['時刻は日付といっしょに入れてください'], value: {birthDate: null, birthTime: null}};
+  if (!validateBirthDate(d).ok) errors.push('日付が正しくありません');
+  else if (isValidDate(today) && d > today) errors.push('まだ来ていない日は入れられません');
+  if (t !== null && !isValidTime(t)) errors.push('時刻が正しくありません');
+  return {ok: errors.length === 0, errors, value: {birthDate: d, birthTime: t}};
+}
+
+// ---- 家族 ----
+// family: {husbandName, wifeName, bigName, bigNote, babyName, roles: {<sha256(小文字メール)>: 'husband'|'wife'}}
+export function validateFamily(input) {
+  const v = input || {};
+  const errors = [];
+  const value = {
+    husbandName: cleanName(v.husbandName), wifeName: cleanName(v.wifeName), bigName: cleanName(v.bigName),
+    bigNote: cleanName(v.bigNote), babyName: cleanName(v.babyName)
+  };
+  for (const k of ['husbandName', 'wifeName', 'bigName', 'babyName']) if (Array.from(value[k]).length > NAME_MAX) { errors.push('名前は20文字まで'); break; }
+  if (Array.from(value.bigNote).length > NOTE_MAX) errors.push('上の子のことは30文字まで');
+  const role = v.role;
+  if (!ROLES.includes(role)) errors.push('このアカウントが夫か妻かを選んでください');
+  return {ok: errors.length === 0, errors, value, role: ROLES.includes(role) ? role : null};
+}
+// 自分の役割。自分の分が無ければ、もう1人の役割から反対を推定する。
+export function resolveRole(family, myHash) {
+  const roles = (family && family.roles && typeof family.roles === 'object') ? family.roles : {};
+  if (myHash && ROLES.includes(roles[myHash])) return {role: roles[myHash], inferred: false};
+  const others = Object.entries(roles).filter(([k, r]) => k !== myHash && ROLES.includes(r)).map(([, r]) => r);
+  if (others.length === 1) return {role: others[0] === 'husband' ? 'wife' : 'husband', inferred: true};
+  return {role: null, inferred: false};
+}
+// 端末の時計で、次の 0:00 までのミリ秒（日付が変わったら画面を作り直すため）。
+export function msUntilMidnight(now = new Date()) {
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+  return Math.max(1000, next.getTime() - now.getTime());
+}
+export function hhmm(now = new Date()) { return pad(now.getHours()) + ':' + pad(now.getMinutes()); }
+// 出生カードの状態。before: まだ（予定日を小さく表示） / after: 生まれて N日目
+export function birthCard(settings, today) {
+  const s = settings || {};
+  if (!isValidDate(s.birthDate)) return {state: 'before', due: formatMonthDay(isValidDate(s.dueDate) ? s.dueDate : DUE_DATE)};
+  const n = birthDayNumber(s.birthDate, today);
+  return {state: 'after', day: n, date: formatShort(s.birthDate), time: isValidTime(s.birthTime) ? s.birthTime : null};
+}
+// 言葉の差し込み用（実名は端末の中で Firestore から読んだものだけ）。
+export function wordContext(family, settings, today) {
+  const f = family || {};
+  const n = birthDayNumber(settings && settings.birthDate, today);
+  return {
+    wife: cleanName(f.wifeName) || 'ママ',
+    husband: cleanName(f.husbandName) || 'パパ',
+    big: cleanName(f.bigName) || '上の子',
+    baby: cleanName(f.babyName) || '赤ちゃん',
+    daytext: n ? '生まれて' + n + '日目。' : ''
+  };
+}

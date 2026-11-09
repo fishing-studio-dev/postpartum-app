@@ -3,22 +3,28 @@
 //   deps.authSdk                    : firebase-auth.js の関数
 //   deps.fs                         : firebase-firestore.js の関数
 //   deps.hashFn, deps.newId         : 省略可
-import {DUE_DATE, isAllowedUser, sha256Hex, validateItem, validateBirthDate, buildSeed, newId as defaultNewId, shortName} from './logic.js';
+//   deps.isStandalone               : 省略可。ホーム画面アプリとして開いているか
+import {DUE_DATE, SEED_VERSION, isAllowedUser, sha256Hex, validateItem, validateBirth, validatePlan, validateFamily, buildSeed, newId as defaultNewId, shortName} from './logic.js';
 import {SEED_ITEMS} from './seed-data.js';
+import {SEED_V2_ITEMS} from './seed-v2.js';
 
 const FALLBACK_CODES = ['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'];
 const QUIET_CODES = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/user-cancelled'];
+export const STANDALONE_LOGIN_TEXT = 'ホーム画面のアプリでログインできないときは、Safariでこのページを開いてログインしてください';
+// R7 までの項目（seedVersion 1）と、R8 で増えた項目（seedVersion 2）。
+export const ALL_SEED = buildSeed([...SEED_ITEMS, ...SEED_V2_ITEMS]);
+export const V2_IDS = Object.freeze(SEED_V2_ITEMS.map(s => s.id));
 
 export function createStore(deps) {
   const {auth, db, authSdk: A, fs: F} = deps;
   const hashFn = deps.hashFn || sha256Hex;
   const makeId = deps.newId || (() => defaultNewId());
-  let state = {auth: 'loading', user: null, settings: null, items: [], photos: [], fromCache: false, error: ''};
+  const standalone = deps.isStandalone || (() => false);
+  let state = {auth: 'loading', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], fromCache: false, error: ''};
   let user = null;
   let unsubs = [];
   let denied = false;
   const listeners = new Set();
-  const loaded = {settings: false, items: false, photos: false};
 
   function set(patch) { state = {...state, ...patch}; for (const fn of listeners) fn(state); }
   function stopWatching() { for (const u of unsubs) { try { u(); } catch { /* ignore */ } } unsubs = []; }
@@ -32,30 +38,46 @@ export function createStore(deps) {
     stopWatching();
     const onErr = e => set({error: errText(e)});
     unsubs.push(F.onSnapshot(ref('meta', 'settings'), snap => {
-      loaded.settings = true;
       set({settings: snap.exists() ? readData(snap) : null, fromCache: cacheFlag(snap)});
     }, onErr));
+    unsubs.push(F.onSnapshot(ref('meta', 'family'), snap => {
+      // キャッシュだけで「無い」と言われたときは、まだ分からないものとして扱う。
+      const exists = snap.exists();
+      set({family: exists ? readData(snap) : null, familyLoaded: exists || !cacheFlag(snap)});
+    }, onErr));
     unsubs.push(F.onSnapshot(F.collection(db, 'items'), snap => {
-      loaded.items = true;
       set({items: snap.docs.map(d => ({id: d.id, ...readData(d)})), fromCache: cacheFlag(snap)});
     }, onErr));
     unsubs.push(F.onSnapshot(F.collection(db, 'photos'), snap => {
-      loaded.photos = true;
       const photos = snap.docs.map(d => ({id: d.id, ...readData(d)}));
       photos.sort((a, b) => time(b.addedAt) - time(a.addedAt) || (a.id < b.id ? -1 : 1));
       set({photos, fromCache: cacheFlag(snap)});
     }, onErr));
   }
 
-  // 初回だけ、トランザクションの中で meta/settings と項目をまとめて作る（2人同時でも1回）。
+  // 最初の項目づくりと、版ごとの追加（移行）。トランザクションの中で行う（2人同時でも安全）。
+  //   meta/settings が無い         → 設定と全項目を作る（seedVersion 2）
+  //   seedVersion が無い（=1）/ <2 → R8 で増えた項目のうち、無いものだけ作る。既存の項目には触れない
+  //   seedVersion >= 2             → 何もしない
+  // 戻り値: 'seeded' | 'migrated' | false
   async function ensureSeeded() {
     const settingsRef = ref('meta', 'settings');
     return F.runTransaction(db, async tx => {
       const snap = await tx.get(settingsRef);
-      if (snap.exists()) return false;
-      tx.set(settingsRef, {birthDate: null, dueDate: DUE_DATE, seeded: true, ...stamp()});
-      for (const s of buildSeed(SEED_ITEMS)) tx.set(ref('items', s.id), {...s.data, ...stamp()});
-      return true;
+      if (!snap.exists()) {
+        tx.set(settingsRef, {birthDate: null, dueDate: DUE_DATE, seeded: true, seedVersion: SEED_VERSION, ...stamp()});
+        for (const s of ALL_SEED) tx.set(ref('items', s.id), {...s.data, ...stamp()});
+        return 'seeded';
+      }
+      const cur = readData(snap) || {};
+      const version = typeof cur.seedVersion === 'number' ? cur.seedVersion : 1;
+      if (version >= SEED_VERSION) return false;
+      const fresh = ALL_SEED.filter(s => V2_IDS.includes(s.id));
+      const missing = [];
+      for (const s of fresh) { const d = await tx.get(ref('items', s.id)); if (!d.exists()) missing.push(s); }
+      for (const s of missing) tx.set(ref('items', s.id), {...s.data, ...stamp()});
+      tx.update(settingsRef, {seedVersion: SEED_VERSION, ...stamp()});
+      return 'migrated';
     });
   }
 
@@ -63,7 +85,7 @@ export function createStore(deps) {
     if (!u) {
       user = null;
       stopWatching();
-      set({auth: denied ? 'denied' : 'signedOut', user: null, settings: null, items: [], photos: []});
+      set({auth: denied ? 'denied' : 'signedOut', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: []});
       return;
     }
     let ok = false;
@@ -73,21 +95,24 @@ export function createStore(deps) {
       denied = true;
       user = null;
       stopWatching();
-      set({auth: 'denied', user: null, settings: null, items: [], photos: []});
+      set({auth: 'denied', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: []});
       try { await A.signOut(auth); } catch { /* ignore */ }
       return;
     }
     denied = false;
     user = u;
-    set({auth: 'ready', user: {uid: u.uid, name: shortName(u.displayName)}, error: ''});
+    let myHash = '';
+    try { myHash = await hashFn(String(u.email).trim().toLowerCase()); } catch { myHash = ''; }
+    set({auth: 'ready', user: {uid: u.uid, name: shortName(u.displayName)}, myHash, error: ''});
     watch();
     try { await ensureSeeded(); } catch (e) { set({error: state.items.length ? '' : errText(e)}); }
   }
 
   function start() {
-    if (A.getRedirectResult) A.getRedirectResult(auth).catch(e => set({error: errText(e)}));
+    if (A.getRedirectResult) A.getRedirectResult(auth).catch(e => set({error: loginErrText(e)}));
     return A.onAuthStateChanged(auth, u => { onUser(u); });
   }
+  function loginErrText(e) { return standalone() ? STANDALONE_LOGIN_TEXT : errText(e); }
 
   async function signIn() {
     denied = false;
@@ -99,9 +124,15 @@ export function createStore(deps) {
       return 'popup';
     } catch (e) {
       const code = e && e.code;
-      if (FALLBACK_CODES.includes(code)) { await A.signInWithRedirect(auth, provider); return 'redirect'; }
-      if (QUIET_CODES.includes(code)) return 'cancelled';
-      set({error: errText(e)});
+      if (FALLBACK_CODES.includes(code)) {
+        try { await A.signInWithRedirect(auth, provider); return 'redirect'; } catch (e2) { set({error: loginErrText(e2)}); return 'error'; }
+      }
+      if (QUIET_CODES.includes(code)) {
+        // ホーム画面アプリではポップアップがすぐ閉じてしまうことがある。
+        if (standalone()) set({error: STANDALONE_LOGIN_TEXT});
+        return 'cancelled';
+      }
+      set({error: loginErrText(e)});
       return 'error';
     }
   }
@@ -118,9 +149,10 @@ export function createStore(deps) {
   function addItem(input) {
     need();
     const v = validateItem(input);
-    if (!v.ok) return {ok: false, errors: v.errors};
+    const p = validatePlan(input);
+    if (!v.ok || !p.ok) return {ok: false, errors: [...v.errors, ...p.errors]};
     const id = makeId();
-    const data = {...v.value, calc: null, note: '', rule: '', confidence: '', tag: '', ifReturnAfter: null, order: 100000,
+    const data = {...v.value, ...p.value, calc: null, note: '', rule: '', confidence: '', tag: '', ifReturnAfter: null, order: 100000,
       done: false, doneBy: null, doneAt: null, custom: true, ...stamp()};
     return {ok: true, id, write: F.setDoc(ref('items', id), data)};
   }
@@ -130,6 +162,13 @@ export function createStore(deps) {
     if (!v.ok) return {ok: false, errors: v.errors};
     return {ok: true, id, write: F.updateDoc(ref('items', id), {...v.value, ...stamp()})};
   }
+  // いつ・誰が。ほかの項目（完了・メモなど）には触れない。
+  function setPlan(id, input) {
+    need();
+    const p = validatePlan(input);
+    if (!p.ok) return {ok: false, errors: p.errors};
+    return {ok: true, write: F.updateDoc(ref('items', id), {...p.value, ...stamp()})};
+  }
   function setMemo(id, memo, current) {
     const v = validateItem({...current, memo});
     if (!v.ok) return {ok: false, errors: v.errors};
@@ -137,11 +176,22 @@ export function createStore(deps) {
     return {ok: true, write: F.updateDoc(ref('items', id), {memo: v.value.memo, ...stamp()})};
   }
   function deleteItem(id) { need(); return F.deleteDoc(ref('items', id)); }
-  function setBirthDate(date) {
+  // 出生日と時刻。meta/settings のほかの値（seedVersion など）は残す（merge）。
+  function setBirth(date, timeText, today) {
     need();
-    const v = validateBirthDate(date);
-    if (!v.ok) return {ok: false};
-    return {ok: true, write: F.setDoc(ref('meta', 'settings'), {birthDate: v.value, dueDate: DUE_DATE, seeded: true, ...stamp()})};
+    const v = validateBirth(date, timeText, today);
+    if (!v.ok) return {ok: false, errors: v.errors};
+    return {ok: true, write: F.setDoc(ref('meta', 'settings'), {birthDate: v.value.birthDate, birthTime: v.value.birthTime, dueDate: DUE_DATE, ...stamp()}, {merge: true})};
+  }
+  function setBirthDate(date) { return setBirth(date, null); }
+  // 家族の名前と、このアカウントの役割。roles はアカウントごと（merge なので、もう1人の分は残る）。
+  function saveFamily(input) {
+    need();
+    const v = validateFamily(input);
+    if (!v.ok) return {ok: false, errors: v.errors};
+    if (!state.myHash) return {ok: false, errors: ['うまくいきませんでした']};
+    const data = {...v.value, roles: {[state.myHash]: v.role}, ...stamp()};
+    return {ok: true, write: F.setDoc(ref('meta', 'family'), data, {merge: true})};
   }
   function addPhoto(p) {
     need();
@@ -166,7 +216,8 @@ export function createStore(deps) {
   }
 
   return {
-    start, signIn, signOut, ensureSeeded, setDone, addItem, editItem, setMemo, deleteItem, setBirthDate, addPhoto, deletePhoto, loadFull,
+    start, signIn, signOut, ensureSeeded, setDone, addItem, editItem, setPlan, setMemo, deleteItem, setBirth, setBirthDate, saveFamily,
+    addPhoto, deletePhoto, loadFull,
     subscribe(fn) { listeners.add(fn); fn(state); return () => listeners.delete(fn); },
     get state() { return state; }
   };

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="てぶっこ">
+  <title>てぶっこ</title>
+  <ellipse cx="62" cy="110" rx="28" ry="4" fill="#f6e3e8"/>
+  <ellipse cx="36" cy="62" rx="9" ry="15" transform="rotate(-24 36 62)" fill="#ffe0e8" stroke="#eeb4c4" stroke-width="2.5"/>
+  <path d="M42 88V42a20 20 0 0 1 40 0v46z" fill="#ffe0e8" stroke="#eeb4c4" stroke-width="2.5" stroke-linejoin="round"/>
+  <circle cx="52" cy="34" r="2" fill="#ffffff"/>
+  <circle cx="72" cy="38" r="2" fill="#ffffff"/>
+  <circle cx="62" cy="28" r="1.6" fill="#ffffff"/>
+  <rect x="38" y="86" width="48" height="18" rx="7" fill="#cdeee0" stroke="#9fd3bd" stroke-width="2"/>
+  <path d="M48 89v12M56 89v12M64 89v12M72 89v12M80 89v12" stroke="#9fd3bd" stroke-width="1.6" stroke-linecap="round"/>
+  <circle cx="54" cy="60" r="3.2" fill="#5b4a52"/>
+  <circle cx="70" cy="60" r="3.2" fill="#5b4a52"/>
+  <ellipse cx="48" cy="69" rx="4.5" ry="2.8" fill="#ffb8c8" opacity=".85"/>
+  <ellipse cx="76" cy="69" rx="4.5" ry="2.8" fill="#ffb8c8" opacity=".85"/>
+  <path d="M58 68q4 4 8 0" fill="none" stroke="#5b4a52" stroke-width="2" stroke-linecap="round"/>
+</svg>

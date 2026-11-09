@@ -43,7 +43,21 @@ export function shrinkToLimit(w, h, target, encode) {
   throw new Error('too-large');
 }
 
+// 端末が読めない形式（HEIC など）のときに出す文。
+export const DECODE_FAIL_TEXT = 'この写真は読み込めませんでした。JPEGで保存し直すか、カメラの設定を『互換性優先』にしてください';
+export function isHeicLike(file) {
+  const f = file || {};
+  return /image\/hei[cf]/i.test(String(f.type || '')) || /\.hei[cf]$/i.test(String(f.name || ''));
+}
+// 失敗の理由 → 画面の文（読めなかったときだけ専用の文）。
+export function photoFailText(decodeFails, otherFails) {
+  if (decodeFails > 0) return DECODE_FAIL_TEXT;
+  if (otherFails > 0) return otherFails + '枚は追加できませんでした';
+  return '';
+}
+
 // ---- ブラウザー用 ----
+// 向き（EXIF）は createImageBitmap の imageOrientation: 'from-image' でそろえる。
 async function decode(file, env) {
   if (typeof env.createImageBitmap === 'function') {
     try { return await env.createImageBitmap(file, {imageOrientation: 'from-image'}); } catch { /* fall back to <img> */ }
@@ -52,7 +66,13 @@ async function decode(file, env) {
   try {
     const img = env.document.createElement('img');
     await new Promise((ok, ng) => { img.onload = ok; img.onerror = ng; img.src = url; });
+    if (!(img.naturalWidth || img.width)) throw new Error('empty');
     return img;
+  } catch {
+    const e = new Error('decode');
+    e.code = 'decode';
+    e.heic = isHeicLike(file);
+    throw e;
   } finally { env.URL.revokeObjectURL(url); }
 }
 // file → {thumb, full, w, h, bytes}

@@ -20,20 +20,22 @@
 </head>
 <body>
 <section id="loading" class="screen center">
-<img class="mascot-big bob" src="./mascot.svg" alt="" width="120" height="120">
+<img class="mascot-big bob deco" src="./mascot.svg" alt="" aria-hidden="true" width="120" height="120">
 </section>
 
 <section id="login" class="screen center" hidden>
-<img class="mascot-big" src="./mascot.svg" alt="" width="140" height="140">
+<img class="mascot-big deco" src="./mascot.svg" alt="" aria-hidden="true" width="140" height="140">
 <h1 class="app-title">産後アプリ</h1>
 <button id="login-btn" type="button" class="big">Googleでログイン</button>
 <p id="login-msg" class="login-msg" role="status" aria-live="polite"></p>
+<img class="chara-login peek deco" src="./chara-tebukko.svg" alt="" aria-hidden="true" width="64" height="64">
 </section>
 
 <div id="app" class="app" hidden>
 <header class="top">
-<img class="mascot-mini" src="./mascot.svg" alt="" width="32" height="32">
+<img class="mascot-mini blink deco" src="./mascot.svg" alt="" aria-hidden="true" width="32" height="32">
 <span class="top-title">産後アプリ</span>
+<img class="drift deco" src="./chara-fuwari.svg" alt="" aria-hidden="true" width="34" height="34">
 <button id="gear" type="button" class="icon-btn" aria-label="設定">⚙</button>
 </header>
 <p id="offline-pill" class="pill" role="status" hidden></p>
@@ -41,11 +43,36 @@
 
 <main>
 <section id="tab-todo" class="tab">
-<h2 class="section-title">次にやること</h2>
+<div id="birth-card" class="birth-card">
+<button id="birth-before" type="button" class="birth-big"><img class="chara-birth deco" src="./chara-tebukko.svg" alt="" aria-hidden="true" width="72" height="72"><span class="birth-big-text">生まれたらここをタップ</span><span id="birth-due" class="birth-due"></span></button>
+<div id="birth-after" class="birth-after" hidden><img class="chara-small bob deco" src="./mascot.svg" alt="" aria-hidden="true" width="40" height="40"><p class="birth-after-text"><span id="birth-days" class="birth-days"></span><span id="birth-note" class="small"></span></p><button id="birth-change" type="button" class="soft-btn small-btn">変更</button></div>
+</div>
+
+<section id="soon-card" class="soon-card" aria-labelledby="soon-title">
+<h2 id="soon-title" class="card-title">今日・明日・もうすぐ</h2>
+<div id="soon-list" class="soon-list"></div>
+<p id="soon-empty" class="small" hidden>3日以内の予定はありません</p>
+<button id="notify-btn" type="button" class="soft-btn notify-btn" aria-pressed="false">アプリを開いている間だけ通知する</button>
+<p id="notify-note" class="small"></p>
+</section>
+
+<section id="word-card" class="word-card" aria-labelledby="word-title">
+<img class="chara-word peek deco" src="./chara-fuwari.svg" alt="" aria-hidden="true" width="48" height="48">
+<h2 id="word-title" class="card-title">今日のことば</h2>
+<p id="word-text" class="word-text"></p>
+<button id="word-setup" type="button" class="soft-btn small-btn" hidden>夫か妻かを選ぶ</button>
+</section>
+
+<h2 class="section-title">やること</h2>
+<label class="search"><span class="visually-hidden">さがす</span><input id="q" type="search" maxlength="40" autocomplete="off" placeholder="さがす" enterkeyhint="search"></label>
 <div id="chips" class="chips" role="group" aria-label="分類"></div>
 <ul id="todo-list" class="list"></ul>
-<div id="todo-empty" class="empty" hidden><img class="mascot-mid" src="./mascot.svg" alt="" width="88" height="88"><p>やることはありません</p></div>
-<button id="done-toggle" type="button" class="soft-btn">完了</button>
+<div id="todo-empty" class="empty" hidden><img class="mascot-mid deco" src="./mascot.svg" alt="" aria-hidden="true" width="88" height="88"><p>やることはありません</p></div>
+<button id="later-toggle" type="button" class="soft-btn group-toggle" aria-expanded="false">先の予定</button>
+<ul id="later-list" class="list" hidden></ul>
+<button id="undated-toggle" type="button" class="soft-btn group-toggle" aria-expanded="false">日付なし</button>
+<ul id="undated-list" class="list" hidden></ul>
+<button id="done-toggle" type="button" class="soft-btn group-toggle" aria-expanded="false">完了</button>
 <ul id="done-list" class="list done-list" hidden></ul>
 <button id="add-btn" type="button" class="fab" aria-label="追加">＋</button>
 </section>
@@ -54,10 +81,11 @@
 <label class="big photo-add">写真を追加<input id="photo-input" class="visually-hidden" type="file" accept="image/*" multiple></label>
 <p id="photo-status" class="hint" role="status" aria-live="polite"></p>
 <ul id="photo-grid" class="grid"></ul>
-<div id="photo-empty" class="empty" hidden><img class="mascot-mid" src="./mascot.svg" alt="" width="88" height="88"><p>写真はまだありません</p></div>
+<div id="photo-empty" class="empty" hidden><img class="mascot-mid deco" src="./mascot.svg" alt="" aria-hidden="true" width="88" height="88"><p>写真はまだありません</p></div>
 </section>
 </main>
 
+<div class="lane" aria-hidden="true"><img class="walk deco" src="./chara-katappo.svg" alt="" aria-hidden="true" width="36" height="36"></div>
 <p class="foot">医療の判断は医療機関・自治体に確認してください</p>
 <nav class="tabs" aria-label="画面">
 <button id="tab-btn-todo" type="button" class="tab-btn" aria-selected="true">やること</button>
@@ -67,10 +95,21 @@
 
 <section id="detail" class="overlay" role="dialog" aria-modal="true" aria-labelledby="d-title" hidden>
 <div class="sheet">
+<button id="d-back" type="button" class="back-btn">← もどる</button>
 <h2 id="d-title" class="sheet-title"></h2>
 <p id="d-date" class="d-date"></p>
 <p id="d-cond" class="d-cond" hidden></p>
 <p id="d-rule" class="small"></p>
+<div class="d-block plan-block"><h3>いつ・誰が</h3>
+<div class="plan-row"><label class="field">いつ<input id="d-plan-date" type="date" min="2025-01-01" max="2030-12-31"></label><label class="field">時刻<input id="d-plan-time" type="time"></label></div>
+<label class="field">誰が<select id="d-assignee"></select></label>
+<p id="d-plan-error" class="error" role="alert"></p>
+<button id="d-plan-save" type="button" class="soft-btn">いつ・誰がを保存</button>
+</div>
+<div class="d-block cal-block"><h3>カレンダーに追加</h3>
+<div class="row-actions"><button id="d-ics" type="button" class="soft-btn">カレンダーに追加</button><a id="d-gcal" class="link-btn" target="_blank" rel="noopener noreferrer">Googleカレンダー</a></div>
+<p id="d-cal-note" class="small"></p>
+</div>
 <div class="d-block"><h3>場所</h3><p id="d-place"></p></div>
 <div class="d-block"><h3>持ち物・書類</h3><ul id="d-docs" class="docs"></ul></div>
 <p id="d-note" class="small"></p>
@@ -78,40 +117,87 @@
 <a id="d-link" class="link-btn" target="_blank" rel="noopener noreferrer" hidden>公式リンク</a>
 <button id="d-done" type="button" class="big">完了にする</button>
 <p id="d-done-by" class="small center-text"></p>
-<div class="row-actions"><button id="d-edit" type="button" class="soft-btn">編集</button><button id="d-delete" type="button" class="soft-btn danger">削除</button><button id="d-close" type="button" class="soft-btn">閉じる</button></div>
+<div class="row-actions"><button id="d-edit" type="button" class="soft-btn">編集</button><button id="d-delete" type="button" class="soft-btn danger">削除</button></div>
+<button id="d-close" type="button" class="soft-btn close-btn">とじる</button>
 </div>
 </section>
 
 <section id="editor" class="overlay" role="dialog" aria-modal="true" aria-labelledby="e-heading" hidden>
 <div class="sheet">
+<button id="e-back" type="button" class="back-btn">← もどる</button>
 <h2 id="e-heading" class="sheet-title">追加</h2>
 <label class="field">タイトル<input id="e-title" type="text" maxlength="80" autocomplete="off"></label>
-<label class="field">日付<input id="e-date" type="date" min="2025-01-01" max="2030-12-31"></label>
+<label class="field">期限<input id="e-date" type="date" min="2025-01-01" max="2030-12-31"></label>
 <label class="field">分類<select id="e-category"></select></label>
 <label class="field">場所<input id="e-place" type="text" maxlength="200" autocomplete="off"></label>
 <label class="field">持ち物・書類（1行に1つ）<textarea id="e-docs" rows="3"></textarea></label>
 <label class="field">メモ<textarea id="e-memo" rows="3" maxlength="2000"></textarea></label>
 <label class="field">リンク<input id="e-link" type="url" inputmode="url" maxlength="500" autocomplete="off" placeholder="https://"></label>
 <p id="e-error" class="error" role="alert"></p>
-<div class="row-actions"><button id="e-save" type="button" class="big">保存</button><button id="e-cancel" type="button" class="soft-btn">やめる</button></div>
+<button id="e-save" type="button" class="big">保存</button>
+<button id="e-cancel" type="button" class="soft-btn close-btn">とじる</button>
 </div>
 </section>
 
 <section id="settings" class="overlay" role="dialog" aria-modal="true" aria-labelledby="s-heading" hidden>
 <div class="sheet">
+<button id="s-back" type="button" class="back-btn">← もどる</button>
 <h2 id="s-heading" class="sheet-title">設定</h2>
-<label class="field">出生日<input id="s-birth" type="date" min="2025-01-01" max="2028-12-31"></label>
+<button id="s-family" type="button" class="soft-btn">家族の名前・このアカウント</button>
+<button id="s-birth-open" type="button" class="soft-btn">出生日</button>
 <p id="s-due" class="small"></p>
-<div class="row-actions"><button id="s-save" type="button" class="big">保存</button><button id="s-clear" type="button" class="soft-btn">予定日で計算</button></div>
-<div class="row-actions"><button id="s-logout" type="button" class="soft-btn">ログアウト</button><button id="s-close" type="button" class="soft-btn">閉じる</button></div>
+<button id="s-logout" type="button" class="soft-btn">ログアウト</button>
+<button id="s-close" type="button" class="soft-btn close-btn">とじる</button>
+</div>
+</section>
+
+<section id="setup" class="overlay" role="dialog" aria-modal="true" aria-labelledby="f-heading" hidden>
+<div class="sheet">
+<button id="f-back" type="button" class="back-btn">← もどる</button>
+<h2 id="f-heading" class="sheet-title">家族のこと</h2>
+<p class="small">名前はこのアプリの中だけで使います。あとから変えられます。</p>
+<label class="field">夫の名前<input id="f-husband" type="text" maxlength="20" autocomplete="off"></label>
+<label class="field">妻の名前<input id="f-wife" type="text" maxlength="20" autocomplete="off"></label>
+<label class="field">上の子の名前<input id="f-big" type="text" maxlength="20" autocomplete="off"></label>
+<label class="field">上の子の年（なくてもよい）<input id="f-bignote" type="text" maxlength="30" autocomplete="off"></label>
+<label class="field">生まれる子の名前（あとで入れてもよい）<input id="f-baby" type="text" maxlength="20" autocomplete="off"></label>
+<div class="d-block"><h3>このアカウントは</h3>
+<div class="row-actions" role="group" aria-label="このアカウントは"><button id="f-role-husband" type="button" class="soft-btn role-btn" aria-pressed="false">夫</button><button id="f-role-wife" type="button" class="soft-btn role-btn" aria-pressed="false">妻</button></div>
+</div>
+<p id="f-error" class="error" role="alert"></p>
+<button id="f-save" type="button" class="big">保存</button>
+<button id="f-close" type="button" class="soft-btn close-btn">とじる</button>
+</div>
+</section>
+
+<section id="birth" class="overlay" role="dialog" aria-modal="true" aria-labelledby="b-heading" hidden>
+<div class="sheet">
+<button id="b-back" type="button" class="back-btn">← もどる</button>
+<h2 id="b-heading" class="sheet-title">生まれた日</h2>
+<label class="field">出生日<input id="b-date" type="date" min="2025-01-01" max="2028-12-31"></label>
+<label class="field">生まれた時刻（なくてもよい）<input id="b-time" type="time"></label>
+<p class="small">生まれた日を1日目として数えます。期限の日付はすべて出生日から計算し直します。</p>
+<p id="b-error" class="error" role="alert"></p>
+<button id="b-save" type="button" class="big">保存</button>
+<button id="b-clear" type="button" class="soft-btn">予定日で計算にもどす</button>
+<button id="b-close" type="button" class="soft-btn close-btn">とじる</button>
 </div>
 </section>
 
 <section id="viewer" class="overlay" role="dialog" aria-modal="true" aria-label="写真" hidden>
 <div class="sheet">
+<button id="v-back" type="button" class="back-btn">← もどる</button>
 <img id="v-img" class="viewer-img" alt="写真">
 <p id="v-by" class="small center-text"></p>
-<div class="row-actions"><button id="v-delete" type="button" class="soft-btn danger">削除</button><button id="v-close" type="button" class="soft-btn">閉じる</button></div>
+<button id="v-delete" type="button" class="soft-btn danger">削除</button>
+<button id="v-close" type="button" class="soft-btn close-btn">とじる</button>
+</div>
+</section>
+
+<section id="exit-dialog" class="overlay center-overlay" role="alertdialog" aria-modal="true" aria-labelledby="x-title" hidden>
+<div class="sheet small-sheet">
+<h2 id="x-title" class="sheet-title center-text">アプリを閉じますか？</h2>
+<div class="row-actions"><button id="x-leave" type="button" class="soft-btn">閉じる</button><button id="x-stay" type="button" class="big">もどる</button></div>
 </div>
 </section>
 <script src="./firebase-config.js"></script>

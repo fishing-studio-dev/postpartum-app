@@ -260,13 +260,19 @@ export function planLabel(item, family) {
 // 予定日（planDate）があればそれ、無ければ期限。
 export function effectiveDate(item, settings) { return planOf(item).planDate || itemDate(item, settings); }
 
+// ---- 「予定は不要」の印（R9.1） ----
+// noPlanNeeded がちょうど true のときだけ「印あり」。無い・false・ほかの値は「印なし」。
+export const NO_PLAN_TEXT = '予定は不要';
+export const isNoPlan = item => Boolean(item) && item.noPlanNeeded === true;
+
 // ---- 今日・明日・もうすぐ ----
+// 通知の元になる一覧。「予定は不要」の印がある項目は、予定日があっても入れない（通知しない）。
 export function upcoming(items, settings, today) {
   const out = {overdue: [], today: [], tomorrow: [], soon: []};
   if (!isValidDate(today)) return out;
   const t1 = addDays(today, 1), t3 = addDays(today, 3);
   for (const it of items || []) {
-    if (!it || it.done) continue;
+    if (!it || it.done || isNoPlan(it)) continue;
     const p = planOf(it);
     const d = p.planDate || itemDate(it, settings);
     if (!d) continue;
@@ -400,6 +406,7 @@ export const stateText = item => (item && item.done ? '済み' : '未完了');
 const byDateTime = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0) || ((a.time || '99') < (b.time || '99') ? -1 : (a.time || '99') > (b.time || '99') ? 1 : 0) || tie(a.item, b.item);
 
 // きょう：今日・明日・もうすぐ（3日以内）。予定日があればその日、無ければ期限の日。済みも「済み」として出す。
+// R9.1：「予定は不要」の印があって予定日が無い項目は出さない（予定日がある項目は表示だけ残す。通知はしない）。
 export const SOON_AHEAD = 3;
 export function todayGroups(items, settings, today) {
   const out = {today: [], tomorrow: [], soon: []};
@@ -408,6 +415,7 @@ export function todayGroups(items, settings, today) {
   for (const it of items || []) {
     if (!it) continue;
     const p = planOf(it);
+    if (isNoPlan(it) && !p.planDate) continue;
     const date = p.planDate || itemDate(it, settings);
     if (!date || date < today || date > t3) continue;
     const e = {item: it, date, time: p.planDate ? p.planTime : null, planned: Boolean(p.planDate)};
@@ -418,12 +426,13 @@ export function todayGroups(items, settings, today) {
 }
 
 // きょうの「確認が必要なこと」：締切を過ぎた未完了、締切が近い（3日以内）未完了。開始日（から）は含めない。
+// R9.1：「予定は不要」の印がある項目は含めない。
 export function attentionItems(items, settings, today) {
   const overdue = [], soon = [];
   if (!isValidDate(today)) return [];
   const t3 = addDays(today, SOON_AHEAD);
   for (const it of items || []) {
-    if (!it || it.done || dateKind(it) === 'from') continue;
+    if (!it || it.done || isNoPlan(it) || dateKind(it) === 'from') continue;
     const d = itemDate(it, settings);
     if (!d) continue;
     if (d < today) overdue.push({item: it, kind: 'overdue', date: d});
@@ -439,6 +448,7 @@ export const WEEKDAY = d => WEEK[weekday(d)];
 export const ASSIGNEE_FILTERS = ['husband', 'wife', 'both'];
 // 選んだ日：予定日がその日の項目（時刻あり／時刻未定）と、予定日が無く期限がその日の項目（締切。予定には見せない）。
 // filter: 'husband' | 'wife' | 'both' | null（担当がちょうどその値の項目だけ）
+// R9.1：「予定は不要」の印があって予定日が無い項目（締切だけの項目）は出さない。予定日がある項目は残す。
 export function dayEntries(items, settings, date, filter = null) {
   const timed = [], untimed = [], deadlines = [];
   for (const it of items || []) {
@@ -446,7 +456,7 @@ export function dayEntries(items, settings, date, filter = null) {
     const p = planOf(it);
     if (filter && p.assignee !== filter) continue;
     if (p.planDate === date) (p.planTime ? timed : untimed).push({item: it, date, time: p.planTime});
-    else if (!p.planDate && itemDate(it, settings) === date) deadlines.push({item: it, date, time: null, kind: dateKind(it)});
+    else if (!p.planDate && !isNoPlan(it) && itemDate(it, settings) === date) deadlines.push({item: it, date, time: null, kind: dateKind(it)});
   }
   timed.sort(byDateTime); untimed.sort(byDateTime); deadlines.sort(byDateTime);
   return {timed, untimed, deadlines, count: timed.length + untimed.length + deadlines.length};
@@ -462,10 +472,11 @@ export function undecidedReason(item) {
   return null;
 }
 // 並び：期限のあるもの（近い順）→ 期限の無いもの。
+// R9.1：「予定は不要」の印がある項目は出さない（印を外せば、条件に合えばまた出る）。
 export function undecidedItems(items, settings) {
   const withDue = [], noDue = [];
   for (const it of items || []) {
-    if (!it || it.done) continue;
+    if (!it || it.done || isNoPlan(it)) continue;
     const reason = undecidedReason(it);
     if (!reason) continue;
     const due = itemDate(it, settings);

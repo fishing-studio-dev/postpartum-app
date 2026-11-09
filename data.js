@@ -198,6 +198,12 @@ export function createStore(deps) {
     if (!Object.keys(patch).length) return {ok: true, unchanged: true, write: Promise.resolve()};
     return {ok: true, unchanged: false, fields: Object.keys(patch), write: F.updateDoc(ref('items', id), {...patch, ...stamp()})};
   }
+  // R9.1:「予定は不要」の印。書くのは noPlanNeeded（true / false）と、いつもの記録（updatedAt / updatedBy）だけ。
+  // 外すときも false を書く（項目を消したり、ほかの値に触れたりしない）。利用者が押したときだけ呼ばれる。
+  function setNoPlanNeeded(id, on) {
+    need();
+    return F.updateDoc(ref('items', id), {noPlanNeeded: Boolean(on), ...stamp()});
+  }
   // R9: 自分だけの設定。prefs/{sha256(小文字メール)} に merge で書く。meta/* には書かない。
   function setPrefs(patch) {
     need();
@@ -247,7 +253,7 @@ export function createStore(deps) {
   }
 
   return {
-    start, signIn, signOut, ensureSeeded, setDone, addItem, editItem, setPlan, setMemo, saveDetail, setPrefs, deleteItem, setBirth, setBirthDate, saveFamily,
+    start, signIn, signOut, ensureSeeded, setDone, addItem, editItem, setPlan, setMemo, saveDetail, setNoPlanNeeded, setPrefs, deleteItem, setBirth, setBirthDate, saveFamily,
     addPhoto, deletePhoto, loadFull,
     subscribe(fn) { listeners.add(fn); fn(state); return () => listeners.delete(fn); },
     get state() { return state; }

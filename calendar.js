@@ -1,5 +1,5 @@
 // カレンダーに追加。.ics ファイル（RFC 5545）と Google カレンダーのリンクを端末の中で作る（通信しない）。
-import {parseDate, isValidTime, addDays, planOf, effectiveDate, assigneeLabel} from './logic.js';
+import {parseDate, isValidTime, addDays, planOf, effectiveDate, assigneeLabel, isNoPlan} from './logic.js';
 
 const CRLF = '\r\n';
 const pad = n => String(n).padStart(2, '0');
@@ -76,8 +76,9 @@ export function gcalUrl(ev) {
 }
 
 // 項目 → 予定。日付は planDate があればそれ、無ければ期限。どちらも無ければ null。
+// R9.1：「予定は不要」の印がある項目は、カレンダーに追加しない（null）。
 export function calendarEvent(item, settings, family) {
-  if (!item) return null;
+  if (!item || isNoPlan(item)) return null;
   const date = effectiveDate(item, settings);
   if (!date) return null;
   const p = planOf(item);

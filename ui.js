@@ -3,7 +3,7 @@
 import {CATEGORIES, DUE_DATE, itemDate, computeDue, conditionLabel, isOverdue, doneLabel, formatShort, formatMD, toDate, shortName,
   todayLocal, planOf, assigneeLabel, resolveRole, wordContext, birthCard, msUntilMidnight, hhmm, upcoming, addDays, isValidDate,
   deadlineLabel, planWhenLabel, assigneeText, stateText, todayGroups, attentionItems, weekDays, WEEKDAY, dayEntries,
-  REASON_TEXT, undecidedItems, undecidedReason, todoSections, PERIOD_TEXT, SOON_AHEAD, formatMonthDay} from './logic.js';
+  REASON_TEXT, undecidedItems, undecidedReason, todoSections, PERIOD_TEXT, SOON_AHEAD, formatMonthDay, isNoPlan, NO_PLAN_TEXT} from './logic.js';
 import {buildIcs, gcalUrl, calendarEvent, icsFileName} from './calendar.js';
 import {dailyWord, wordPool, WORD_TITLE} from './words.js';
 import {createBackGuard} from './history.js';
@@ -31,6 +31,18 @@ export const SAVE_TEXT = Object.freeze({
   queued: 'つながったら保存します',
   failed: '保存できませんでした。入力はそのまま残っています。もう一度「保存」を押してください',
   unchanged: '変更はありません'
+});
+// R9.1：「予定は不要」の印（項目の画面のボタンと、まだ未定の各行のボタン）
+export const NOPLAN = Object.freeze({
+  on: '予定は不要にする',
+  off: '予定は不要を外す',
+  note: '印を付けると『まだ未定』に出なくなり、通知とカレンダー追加の対象から外れます。外せば元に戻ります',
+  calNote: '『予定は不要』の印があるので、カレンダーには追加しません（印を外すと追加できます）',
+  rowBtn: '予定は不要',
+  toastRow: '『予定は不要』にしました（やることで外せます）',
+  toastOn: '『予定は不要』にしました',
+  toastOff: '『予定は不要』を外しました',
+  failed: '保存できませんでした。印は変わっていません。もう一度押してください'
 });
 export const NOTIFY_LINE = 'お知らせ：アプリを開いている間のみ';
 export const GROUP_MAX = 3;
@@ -108,6 +120,7 @@ export function mountUI(document, opts = {}) {
   }
   // 「保存」ボタンの共通処理。key ごとに番号を振り、古い結果は表示しない（後から古い成功を出さない）。
   //   o.statusId：状態を出す要素、o.isCurrent()：まだ同じ画面か、o.onOk / o.onFail、o.panel：成功したら閉じるパネル
+  //   o.failText：失敗の文（省略時は SAVE_TEXT.failed）、o.reportFail：画面が開いたままでも失敗を「確認が必要なこと」に出す（R9.1）
   function submit(key, write, o = {}) {
     const seq = (saveSeq[key] = (saveSeq[key] || 0) + 1);
     const status = $(o.statusId);
@@ -126,10 +139,11 @@ export function mountUI(document, opts = {}) {
       playSaved();
     }, e => {
       if (seq !== saveSeq[key]) return;
-      show(SAVE_TEXT.failed, 'failed');
+      const failText = o.failText || SAVE_TEXT.failed;
+      show(failText, 'failed');
       if (o.onFail) o.onFail(e);
       const stillOpen = o.panel ? !$(o.panel).hidden && (!o.isCurrent || o.isCurrent()) : (!o.isCurrent || o.isCurrent());
-      if (!stillOpen) { addSaveError(key, o.title, SAVE_TEXT.failed); toast('保存できませんでした：' + (o.title || '')); }
+      if (!stillOpen || o.reportFail) { addSaveError(key, o.title, failText); toast('保存できませんでした：' + (o.title || '')); }
     });
   }
   function playSaved() { motion.play($('chara-wrap'), 'saved', currentChar()); }
@@ -292,6 +306,7 @@ export function mountUI(document, opts = {}) {
     meta.append(el('span', 'ag-deadline', deadlineLabel(item, settings()) || '締切 なし'));
     meta.append(el('span', 'ag-who', assigneeText(item, family())));
     meta.append(el('span', 'badge state ' + (item.done ? 'is-done' : 'is-open'), stateText(item)));
+    if (isNoPlan(item)) meta.append(el('span', 'badge noplan', NO_PLAN_TEXT));
     b.append(meta);
     return b;
   }
@@ -468,9 +483,36 @@ export function mountUI(document, opts = {}) {
       if (p.planDate) meta.append(el('span', 'ag-plan', planWhenLabel(item)));
       if (p.assignee) meta.append(el('span', 'ag-who', assigneeText(item, family())));
       main.append(meta);
-      li.append(main, btn('soft-btn decide-btn', '決める', () => openPlanner(item.id)));
+      // R9.1：「決める」の隣に「予定は不要」。押すと印を付ける（行は、印が付いたデータが届いたときに消える）。
+      const np = btn('soft-btn noplan-row-btn', NOPLAN.rowBtn, () => setNoPlan(item.id, true, 'row'));
+      np.setAttribute('aria-label', '「' + item.title + '」を' + NOPLAN.on);
+      if (rowBusy.has(item.id)) np.disabled = true;
+      li.append(main, btn('soft-btn decide-btn', '決める', () => openPlanner(item.id)), np);
       return li;
     }));
+  }
+
+  // ---- R9.1：「予定は不要」の印 ----
+  // 保存の流れは submit()（保存中… → 書き込みが終わってから 保存しました／失敗は「確認が必要なこと」にも出す）。
+  // from: 'row'（まだ未定の行）| 'detail'（項目の画面）
+  const rowBusy = new Set();
+  function setNoPlan(id, on, from) {
+    const it = findItem(id);
+    if (!it || !store) return;
+    if (from === 'row' && rowBusy.has(id)) return;
+    let write;
+    try { write = store.setNoPlanNeeded(id, on); } catch (e) { write = Promise.reject(e); }
+    const fromRow = from === 'row';
+    if (fromRow) { rowBusy.add(id); renderUndecided(); }
+    if (isOffline()) toast(QUEUED_TEXT);
+    const title = it.title;
+    submit('noplan:' + id, write, {
+      statusId: fromRow ? 'u-status' : 'd-noplan-status',
+      title, failText: NOPLAN.failed, reportFail: true,
+      isCurrent: fromRow ? () => tab === 'undecided' : () => detailId === id && !$('detail').hidden,
+      onOk: () => toast(on ? (fromRow ? NOPLAN.toastRow : NOPLAN.toastOn) : NOPLAN.toastOff)
+    });
+    if (fromRow) Promise.resolve(write).catch(() => {}).then(() => { rowBusy.delete(id); if (state.auth === 'ready') renderUndecided(); });
   }
   function openPlanner(id) {
     const it = findItem(id);
@@ -518,6 +560,7 @@ export function mountUI(document, opts = {}) {
     const label = item.done ? doneLabel(item) : deadlineLabel(item, s);
     if (label) meta.append(el('span', 'row-date', label));
     meta.append(el('span', 'badge cat', item.category));
+    if (isNoPlan(item)) meta.append(el('span', 'badge noplan', NO_PLAN_TEXT));
     if (item.tag) meta.append(el('span', 'badge tag', item.tag));
     const p = planOf(item);
     if (!item.done && p.planDate) meta.append(el('span', 'badge plan', planWhenLabel(item)));
@@ -568,6 +611,7 @@ export function mountUI(document, opts = {}) {
   function openDetail(id) {
     detailId = id;
     $('d-status').textContent = ''; $('d-status').className = 'save-status';
+    $('d-noplan-status').textContent = ''; $('d-noplan-status').className = 'save-status';
     $('d-cal-status').textContent = '';
     renderDetail(true);
     if (drafts[id]) {
@@ -597,7 +641,8 @@ export function mountUI(document, opts = {}) {
     const s = settings();
     const dirty = !fresh && isDirty('detail');
     $('d-title').textContent = it.title;
-    $('d-summary').textContent = [deadlineLabel(it, s) || '締切 なし', planWhenLabel(it), assigneeText(it, family()), stateText(it)].join('　');
+    const noPlan = isNoPlan(it);
+    $('d-summary').textContent = [deadlineLabel(it, s) || '締切 なし', planWhenLabel(it), assigneeText(it, family()), stateText(it), ...(noPlan ? [NO_PLAN_TEXT] : [])].join('　');
     const lab = deadlineLabel(it, s);
     $('d-date').textContent = lab ? lab + (isOverdue(it, s, today()) ? '（期限切れ）' : '') : '期限なし';
     const cond = conditionLabel(it, s);
@@ -615,11 +660,17 @@ export function mountUI(document, opts = {}) {
       $('d-plan-error').textContent = '';
       fillAssignee($('d-assignee'), p.assignee);
     } else fillAssignee($('d-assignee'), val('d-assignee'));
-    const ev = calendarEvent(it, s, family());
+    // R9.1：「予定は不要」のボタン。印があるときはカレンダーのボタンとリンクを出さず、理由を書く。
+    const npb = $('d-noplan');
+    npb.textContent = noPlan ? NOPLAN.off : NOPLAN.on;
+    npb.setAttribute('aria-pressed', String(noPlan));
+    $('d-noplan-note').textContent = NOPLAN.note;
+    const ev = noPlan ? null : calendarEvent(it, s, family());
     $('d-ics').hidden = !ev;
     const g = $('d-gcal');
     if (ev) { g.href = gcalUrl(ev); g.hidden = false; } else { g.hidden = true; g.removeAttribute('href'); }
-    $('d-cal-note').textContent = calNote(it, ev);
+    $('d-cal-note').textContent = noPlan ? NOPLAN.calNote : calNote(it, ev);
+    if (noPlan) $('d-cal-status').textContent = '';
     const link = $('d-link');
     if (it.sourceUrl && /^https:\/\//.test(it.sourceUrl)) { link.href = it.sourceUrl; link.hidden = false; }
     else { link.hidden = true; link.removeAttribute('href'); }
@@ -645,6 +696,8 @@ export function mountUI(document, opts = {}) {
   function downloadIcs() {
     const it = findItem(detailId);
     if (!it) return;
+    // R9.1：印がある項目のファイルは作らない（ボタンは隠しているが、念のため）。
+    if (isNoPlan(it)) { $('d-cal-note').textContent = NOPLAN.calNote; return; }
     const ev = calendarEvent(it, settings(), family());
     if (!ev || typeof opts.download !== 'function') return;
     opts.download(buildIcs(ev, nowFn()), icsFileName(ev.title));
@@ -944,8 +997,12 @@ export function mountUI(document, opts = {}) {
     forceClose('detail');
   };
   $('d-save').onclick = saveDetail;
+  $('d-noplan').onclick = () => { const it = findItem(detailId); if (it) setNoPlan(it.id, !isNoPlan(it), 'detail'); };
   $('d-ics').onclick = downloadIcs;
-  $('d-gcal').onclick = () => { $('d-cal-status').textContent = 'Googleカレンダーを開きました。登録するには、開いた画面で保存してください'; };
+  $('d-gcal').onclick = () => {
+    if (isNoPlan(findItem(detailId))) { $('d-cal-note').textContent = NOPLAN.calNote; return; }
+    $('d-cal-status').textContent = 'Googleカレンダーを開きました。登録するには、開いた画面で保存してください';
+  };
   $('p-save').onclick = savePlanner;
   $('p-later').onclick = () => requestClose('planner');
   $('e-save').onclick = saveEditor;

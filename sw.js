@@ -1,4 +1,4 @@
-/* R9 service worker. アプリのファイル（相対パス）と、firebase-config.js で固定した
+/* R9.1 service worker（R9 と同じしくみ。キャッシュの名前だけ新しくした）。アプリのファイル（相対パス）と、firebase-config.js で固定した
    Firebase SDK の3ファイルだけをキャッシュする。Firestore / Auth / googleapis への通信と
    GET 以外のリクエストには一切さわらない。利用者のデータは保存しない。
    キャラクターの画像は、最初のうさぎだけを先に入れる。ほかの子（chars/ の中）は、選んで初めて使うときに
@@ -6,7 +6,8 @@
    通知は「アプリを開いている間」にページから出すものだけ（Push は使わない）。 */
 'use strict';
 importScripts('./firebase-config.js');
-const VERSION = 'r9-2026-11-10-1';
+// R9.1：キャッシュ名は postpartum-r9-r9-1-2026-11-10-1。R9 の postpartum-r9-r9-2026-11-10-1 は PREFIX が同じなので activate で消える。
+const VERSION = 'r9-1-2026-11-10-1';
 const PREFIX = 'postpartum-r9-';
 const LEGACY_PREFIXES = ['postpartum-r8-', 'postpartum-r7-', 'postpartum-r6-', 'postpartum-r5-'];
 const CACHE = PREFIX + VERSION;

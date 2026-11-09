@@ -176,6 +176,13 @@ main { padding: 0 .9rem; max-width: 640px; margin: 0 auto; }
 .reason-chip.is-both { background: var(--pink-light); }
 .reason-chip.is-assignee { background: var(--lavender); }
 .decide-btn { flex: 0 0 auto; align-self: center; background: var(--primary); color: var(--on-primary); border-color: var(--primary); font-weight: 700; }
+/* 「予定は不要」：行のボタン、項目の画面のボタン、印のバッジ（文字で示す。色だけにしない） */
+.noplan-row-btn { flex: 0 0 auto; align-self: center; min-height: var(--tap); background: var(--card); color: var(--ink); border-color: var(--stitch); font-weight: 700; }
+.noplan-row-btn:disabled { opacity: .7; }
+.noplan-btn { width: 100%; min-height: var(--tap); }
+.noplan-btn[aria-pressed="true"] { background: var(--lavender); border-color: var(--primary); color: var(--ink); font-weight: 700; }
+.noplan-btn[aria-pressed="true"]::before { content: "✓ "; }
+.badge.noplan { background: var(--card); color: var(--ink); border: 1px solid var(--muted); font-weight: 700; }
 
 /* todo */
 .search-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: 0 0 .6rem; }

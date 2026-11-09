@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'none'; font-src 'none'; media-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types postpartum-r5-sw">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#205e4d">
+<meta name="application-name" content="産後アプリ">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="産後アプリ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>産後アプリ R5・架空デモ</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-180.png">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="safety" role="note" aria-label="大切なお知らせ"><ul>
+<li>データはこの端末のみ</li>
+<li>実在の医療情報なし（架空・テスト）</li>
+<li>医療助言ではない</li>
+</ul></header>
+<main><div class="badge">R5 · 本人向け操作確認 · 未公開</div><h1>ひとつずつ、確かめる</h1>
+<p>産後アプリの操作感を確認する、架空データ専用デモです。</p>
+<p class="notice"><strong>実際の予定・健康情報には使えません。</strong>本人認証、通知、医療判断、予防接種の期限案内はありません。入力は下の状態選択だけです。選んだだけでは保存されません。各項目の「保存」を押してください。</p>
+<p id="offline-status" aria-live="polite"></p>
+<p id="progress" aria-live="polite"></p><p id="dirty" aria-live="polite"></p><section id="tasks" aria-label="架空の予定2件"></section>
+<p id="message" role="status" aria-live="polite"></p>
+<div class="actions"><button id="reload" type="button">保存済みの状態を読み込み直す</button><button id="reset" type="button">架空データを初期化</button></div>
+<footer><p>入力した状態はどこにも送信しません。保存先はこの端末のこのブラウザー（またはホーム画面のアプリ）の中だけです。別の端末とは同期されず、ブラウザーやアプリのデータを削除すると失われます。iPhone では、Safari で開いた場合とホーム画面から開いた場合で保存先が別になります。</p>
+<p>最初に開いたときだけ、このアプリ自身のファイル（画面・アイコンなど）を配信元から取り込んで端末に保存し、その後は通信なしで動きます。同じ配信元（ドメイン）にある別のページからは保存内容を読まれる可能性があるため、架空データだけを使ってください。同じ端末を使う人から状態を隠す機能はありません。複数のタブで開くと、別のタブでの保存を検知して知らせますが、同時操作を完全には防げません。</p></footer>
+<noscript>このデモはJavaScriptが必要です。</noscript></main>
+<script src="./offline.js"></script>
+<script src="./app.js"></script>
+</body></html>

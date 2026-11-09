@@ -1,0 +1,30 @@
+:root{font-family:system-ui,-apple-system,sans-serif;color:#173c36;background:#f4f7f4;color-scheme:light;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);-webkit-tap-highlight-color:rgba(32,94,77,.2)}
+.safety{margin:0;padding:calc(.6rem + env(safe-area-inset-top)) 1rem .7rem;background:#7a1f1f;color:#fff;font-weight:700;line-height:1.5}
+.safety ul{margin:0 auto;padding:0;list-style:none;max-width:36rem;display:flex;flex-direction:column;gap:.2rem}
+.safety li::before{content:"■ ";font-size:.7em;vertical-align:.15em}
+main{max-width:36rem;margin:auto;padding:1rem}
+h1{font-size:1.45rem;margin:.4rem 0 .5rem}
+p{line-height:1.6}
+.badge{font-size:.85rem;color:#41685e}
+.notice{background:#fff2d6;border-left:4px solid #a86a12;padding:.8rem;border-radius:.5rem}
+#offline-status{font-size:.9rem;color:#41685e;margin:.4rem 0}
+article{background:#fff;border:1px solid #c8dbd2;border-radius:1rem;padding:1rem;margin:1rem 0;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+h2{font-size:1.1rem;width:100%;margin:0 0 .4rem}
+.mark{width:100%;font-size:.9rem;color:#41685e}
+.mark[data-dirty=true],#dirty[data-dirty=true]{color:#8a4b00;font-weight:700}
+button,select{font:inherit;font-size:1rem;min-height:48px;min-width:48px;padding:.6rem 1rem;border:1px solid #426d5f;border-radius:.6rem;touch-action:manipulation}
+select{flex:1 1 10rem;background:#fff;color:#173c36}
+button{background:#205e4d;color:#fff;cursor:pointer;flex:0 0 auto}
+button:focus-visible,select:focus-visible{outline:3px solid #be761d;outline-offset:3px}
+.actions{display:flex;flex-direction:column;gap:.6rem;margin:1rem 0}
+#reset,#reload{background:transparent;color:#205e4d;width:100%}
+#reload[data-attention=true]{border:3px solid #b42318;font-weight:700}
+#message{min-height:3em;font-weight:600;padding:.6rem;border-radius:.5rem}
+#message[data-kind=error],#message[data-kind=conflict]{background:#fde8e8;color:#8b1d1d;border-left:4px solid #b42318}
+#message[data-kind=saved]{background:#e5f3ea;color:#1d5e3a}
+footer{font-size:.85rem;color:#47665d}
+strong{font-weight:700}
+@media (display-mode:standalone){.badge::after{content:" · ホーム画面から起動中"}}

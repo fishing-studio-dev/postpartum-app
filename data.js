@@ -8,6 +8,7 @@ import {DUE_DATE, SEED_VERSION, isAllowedUser, sha256Hex, validateItem, validate
 import {cleanPrefs} from './prefs.js';
 import {SEED_ITEMS} from './seed-data.js';
 import {SEED_V2_ITEMS} from './seed-v2.js';
+import {validateGift, sortGifts} from './gifts.js';
 
 const FALLBACK_CODES = ['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment'];
 const QUIET_CODES = ['auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/user-cancelled'];
@@ -21,7 +22,7 @@ export function createStore(deps) {
   const hashFn = deps.hashFn || sha256Hex;
   const makeId = deps.newId || (() => defaultNewId());
   const standalone = deps.isStandalone || (() => false);
-  let state = {auth: 'loading', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], prefs: null, fromCache: false, error: ''};
+  let state = {auth: 'loading', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], prefs: null, gifts: [], giftsLoaded: false, fromCache: false, error: ''};
   let user = null;
   let unsubs = [];
   let denied = false;
@@ -54,6 +55,10 @@ export function createStore(deps) {
       photos.sort((a, b) => time(b.addedAt) - time(a.addedAt) || (a.id < b.id ? -1 : 1));
       set({photos, fromCache: cacheFlag(snap)});
     }, onErr));
+    // R10-6：夫婦で贈り合うことば（gifts）。読めるのはログインできる2人だけ（firestore.rules）。
+    unsubs.push(F.onSnapshot(F.collection(db, 'gifts'), snap => {
+      set({gifts: sortGifts(snap.docs.map(d => ({id: d.id, ...readData(d)}))), giftsLoaded: state.giftsLoaded || !cacheFlag(snap) || snap.docs.length > 0});
+    }, () => set({giftsLoaded: true})));
     // R9: 自分だけの設定（キャラクター・動き）。文書が無くてもよい（既定値を使う）。
     if (state.myHash) {
       unsubs.push(F.onSnapshot(ref('prefs', state.myHash), snap => {
@@ -92,7 +97,7 @@ export function createStore(deps) {
     if (!u) {
       user = null;
       stopWatching();
-      set({auth: denied ? 'denied' : 'signedOut', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], prefs: null});
+      set({auth: denied ? 'denied' : 'signedOut', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], prefs: null, gifts: [], giftsLoaded: false});
       return;
     }
     let ok = false;
@@ -102,7 +107,7 @@ export function createStore(deps) {
       denied = true;
       user = null;
       stopWatching();
-      set({auth: 'denied', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], prefs: null});
+      set({auth: 'denied', user: null, settings: null, family: null, familyLoaded: false, myHash: '', items: [], photos: [], prefs: null, gifts: [], giftsLoaded: false});
       try { await A.signOut(auth); } catch { /* ignore */ }
       return;
     }
@@ -212,6 +217,15 @@ export function createStore(deps) {
     if (!state.myHash) return {ok: false, errors: ['うまくいきませんでした']};
     return {ok: true, write: F.setDoc(ref('prefs', state.myHash), {...clean, ...stamp()}, {merge: true})};
   }
+  // R10-6：ことばを贈る。fromRole はこのアカウントの役割（はっきり選んだもの。推測した役割では贈らない）。
+  //   書くのは text・from・to・createdAt・createdBy（uid）だけ。メール・表示名は書かない。書き換え・削除はしない。
+  function sendGift(text, fromRole) {
+    need();
+    const v = validateGift(text, fromRole);
+    if (!v.ok) return {ok: false, errors: v.errors};
+    const id = makeId();
+    return {ok: true, id, write: F.setDoc(ref('gifts', id), {...v.value, createdAt: F.serverTimestamp(), createdBy: user.uid})};
+  }
   function deleteItem(id) { need(); return F.deleteDoc(ref('items', id)); }
   // 出生日と時刻。meta/settings のほかの値（seedVersion など）は残す（merge）。
   function setBirth(date, timeText, today) {
@@ -253,7 +267,7 @@ export function createStore(deps) {
   }
 
   return {
-    start, signIn, signOut, ensureSeeded, setDone, addItem, editItem, setPlan, setMemo, saveDetail, setNoPlanNeeded, setPrefs, deleteItem, setBirth, setBirthDate, saveFamily,
+    start, signIn, signOut, ensureSeeded, setDone, addItem, editItem, setPlan, setMemo, saveDetail, setNoPlanNeeded, setPrefs, sendGift, deleteItem, setBirth, setBirthDate, saveFamily,
     addPhoto, deletePhoto, loadFull,
     subscribe(fn) { listeners.add(fn); fn(state); return () => listeners.delete(fn); },
     get state() { return state; }

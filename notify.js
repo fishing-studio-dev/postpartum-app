@@ -59,5 +59,12 @@ export function createNotifier({Notification: N, storage, show} = {}) {
     }
     return due;
   }
-  return {enable, disable, check, enabled, status, get sent() { return sent; }};
+  // R10-6：相手からことばが届いたとき（アプリを開いている間だけ。Push・Cloud Functions は使わない）。key ごとに1回だけ。
+  function say(key, title, body) {
+    if (!enabled() || typeof show !== 'function' || sent.has(key)) return false;
+    sent.add(key);
+    try { const r = show(title, {body, tag: key}); if (r && typeof r.catch === 'function') r.catch(() => {}); } catch { /* ignore */ }
+    return true;
+  }
+  return {enable, disable, check, say, enabled, status, get sent() { return sent; }};
 }

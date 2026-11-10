@@ -13,9 +13,11 @@ import {OFFLINE_TEXT, QUEUED_TEXT} from './offline.js';
 import {MAX_FILES, photoFailText} from './photo.js';
 import {errText} from './data.js';
 import {CHARACTERS, getCharacter} from './chars/registry.js';
-import {placementFor, placeOf, PLACE_TEXT} from './placement.js';
+import {placementFor, placeOf, PLACE_TEXT, stageFor, pickLeadIndex} from './placement.js';
+import {createStroll} from './stroll.js';
+import {GIFT_MAX, GIFT_TEXT, GIFT_FROM_LABEL, GIFT_TO_LABEL, partnerOf, charCount, validateGift, latestReceived, receivedGifts, giftHistory, giftWhen, giftHeading, giftMs} from './gifts.js';
 import {createMotion} from './motion.js';
-import {resolvePrefs, readLocalPrefs, writeLocalPrefs, cleanPrefs} from './prefs.js';
+import {resolvePrefs, readLocalPrefs, writeLocalPrefs, cleanPrefs, SERIES, getSeries} from './prefs.js';
 
 export const DENIED_TEXT = 'このアプリは使えません';
 export const TABS = Object.freeze(['today', 'week', 'undecided', 'todo', 'more']);
@@ -47,6 +49,7 @@ export const NOPLAN = Object.freeze({
   failed: '保存できませんでした。印は変わっていません。もう一度押してください'
 });
 export const NOTIFY_LINE = 'お知らせ：アプリを開いている間のみ';
+export const STAGE_FRIEND_TEXT = 'きょうのなかま';   // R10-6
 // R10：きょうの「今日と明日」で、日時か担当が決まっていない行に出す「日時・担当を決める」と、その場で開く「いつ・誰が」の欄。
 // 保存は詳細の「保存」と同じ store.saveDetail（変わった いつ・誰が だけを1回の update で書く）。担当は自動で入れない。
 export const QUICK_PLAN = Object.freeze({
@@ -154,15 +157,28 @@ export function mountUI(document, opts = {}) {
   const notifier = createNotifier({Notification: opts.Notification, storage: opts.storage, show: opts.showNotification});
   const motion = opts.motion || createMotion({setTimeout: opts.setTimeout, clearTimeout: opts.clearTimeout, matchMedia: opts.matchMedia, document, now: opts.clock});
   const guard = createBackGuard({history: opts.history, onBack, onExitAsk: showExit});
+
   // R10-4：どの子をどこに出すかは、その日のローカルの日付だけで決まる（placement.js）。prefs.character は使わない。
-  const place = () => placementFor(today());
-  const currentChar = () => place().today;
+  // R10-6：使うのは設定で選んだシリーズの10体（いまはシリーズ1だけ）。
+  //   きょうには3体（日付で決まる）。そのうちの主役は、アプリを開くたびにランダム（leadIndex はこの画面を作ったときに1回だけ決める）。
+  const randomFn = typeof opts.random === 'function' ? opts.random : () => 0;   // 乱数は app.js が渡す（無ければ3体の1番目）
+  const leadIndex = pickLeadIndex(randomFn);
+  const seriesList = () => getSeries(prefs.series).characters;
+  const place = () => placementFor(today(), seriesList());
+  const stage = () => stageFor(today(), seriesList(), leadIndex);
+  const currentChar = () => stage().lead;
+  // R10-6：きょうの3体の「歩く・遊ぶ」。動いてよいとき（motion.canMove()）で、きょうを見ているときだけ。
+  const stroll = createStroll({setTimeout: opts.setTimeout, random: randomFn, canMove: () => motion.canMove(), isShown: () => tab === 'today' && state.auth === 'ready'});
   // 常時の動き（CSS）：動かしてよいときだけ。文字入力中・パネル表示中・画面外・裏・動きを減らす／停止では .app に data-idle="off"。
   //   OS の「動きを減らす」は CSS の @media で止める。motion の止める条件を変えたところでは、続けて syncIdle() を呼ぶ。
   function syncIdle() { const a = $('app'); if (a) a.setAttribute('data-idle', motion.canMove() ? 'on' : 'off'); }
   const blockMotion = (reason, on) => { motion.block(reason, on); syncIdle(); };
   // いま画面に出ている子（img の data-char）。触ったときの反応はこの子のもの。
-  const shownChar = imgId => getCharacter(($(imgId) && $(imgId).getAttribute('data-char')) || currentChar().id);
+  // R10-7：選んだシリーズの子から先に探す（シリーズ2〜5の子は registry の一覧に無いため）。
+  const shownChar = imgId => {
+    const id = ($(imgId) && $(imgId).getAttribute('data-char')) || currentChar().id;
+    return seriesList().find(c => c.id === id) || getCharacter(id);
+  };
 
   function toast(text) {
     const t = $('toast');
@@ -525,8 +541,35 @@ export function mountUI(document, opts = {}) {
     // R10-4：きょうの主役＝その日の配置の rotated[0]（src は実行時に入れる）。読み込めなければ絵を隠す。
     setCharImg($('chara-img'), c);
     $('chara-wrap').setAttribute('data-char', c.id);
+    renderStage();
     $('app').setAttribute('data-motion-mode', prefs.motion);
     syncIdle();
+  }
+  // R10-6：きょうの舞台（主役＋なかま2体）。絵はいまの静止画のまま。動きは stroll.js と style.css。
+  function renderStage() {
+    const st = stage();
+    const order = [st.lead, ...st.friends];
+    order.forEach((c, i) => {
+      const a = $('stage-a' + i), img = $('stage-img' + i);
+      if (!a || !img) return;
+      setCharImg(img, c);
+      a.setAttribute('data-char', c.id);
+    });
+    const cap = $('stage-caption');
+    // R10-7：名前の無いシリーズ（フェルト・ドット絵・編みぐるみ）では、名前を出さない（説明の文も出さない）。
+    // R10-7-2：名前の途中で行が折れないように、名前は1つずつ <span class="name-nb">（style.css で white-space: nowrap）に入れる。
+    //   行が折れてよいのは、名前と名前の間（「きょうの主役は」「。なかまは」「と」「。」のところ）だけ。
+    if (cap) {
+      cap.textContent = '';
+      if (order.every(c => c.name)) {
+        const nb = n => el('span', 'name-nb', n);
+        const parts = [el('span', null, 'きょうの主役は'), nb(st.lead.name), el('span', null, '。なかまは')];
+        st.friends.forEach((c, i) => { if (i) parts.push(el('span', null, 'と')); parts.push(nb(c.name)); });
+        parts.push(el('span', null, '。'));
+        cap.replaceChildren(...parts);
+      } else cap.replaceChildren();
+    }
+    if (!stroll.actors.length) stroll.setActors([0, 1, 2].map(i => $('stage-a' + i)));
   }
   // R10-4：ログイン／読み込み中の絵も、その日の「きょう」の子（HTML の初期値は はなっぱ）。
   function renderLoginChara() {
@@ -1193,7 +1236,37 @@ export function mountUI(document, opts = {}) {
       : (st === 'denied' ? '通知が許可されていません。' : '') + NOTIFY_NOTE;
     for (const m of ['standard', 'reduce', 'stop']) $('m-' + m).setAttribute('aria-pressed', String(prefs.motion === m));
     $('m-note').textContent = motion.reducedOS() ? MOTION_NOTE.os : MOTION_NOTE[prefs.motion];
+    renderSeries();
     renderCharList();
+  }
+  // R10-6：好きなシリーズを選ぶ（10シリーズ）。中身がそろっているシリーズだけ選べる（いまはシリーズ1だけ。ほかは「準備中」）。
+  //   選んだシリーズは自分だけの設定（prefs.series。端末とアカウントの両方に保存）。
+  let seriesBuilt = false;
+  const seriesButtons = new Map();
+  function renderSeries() {
+    const host = $('series-list');
+    if (!host || tab !== 'more' || morePane !== 'settings') return;   // 設定を開いたときに初めて作る（絵の読み込みを増やさない）
+    if (!seriesBuilt) {
+      seriesBuilt = true;
+      host.replaceChildren(...SERIES.map(sr => {
+        const b = btn('series-opt' + (sr.available ? '' : ' is-pending'), null, () => { if (sr.available) setPref({series: sr.id}, 'シリーズを「' + sr.label + '」にしました', 'series-status'); });
+        b.setAttribute('role', 'radio');
+        b.setAttribute('data-series', sr.id);
+        b.disabled = !sr.available;
+        if (!sr.available) b.setAttribute('aria-disabled', 'true');
+        const thumbs = el('span', 'series-thumbs');
+        for (const c of sr.characters.slice(0, 3)) { const im = el('img', 'series-thumb'); im.alt = ''; im.width = 32; im.height = 32; setCharImg(im, c); thumbs.append(im); }
+        b.append(el('span', 'series-no', 'シリーズ' + sr.n), el('span', 'series-name', sr.label), el('span', 'series-count', sr.available ? sr.characters.length + '体' : ''), thumbs);
+        seriesButtons.set(sr.id, b);
+        return b;
+      }));
+    }
+    const cur = getSeries(prefs.series).id;
+    for (const [id, b] of seriesButtons) {
+      const on = id === cur;
+      b.setAttribute('aria-checked', String(on));
+      b.className = 'series-opt' + (b.disabled ? ' is-pending' : '') + (on ? ' is-selected' : '');
+    }
   }
   // キャラクターの一覧は、設定を開いたときに初めて作る。
   // 一度だけ作り、あとはその日の役の札だけを更新する（作り直すとフォーカスが外れ、画像も読み直すため）。
@@ -1204,7 +1277,7 @@ export function mountUI(document, opts = {}) {
     if (tab !== 'more' || morePane !== 'settings') return;
     if (!charListBuilt) {
       charListBuilt = true;
-      $('char-list').replaceChildren(...CHARACTERS.map(c => {
+      $('char-list').replaceChildren(...seriesList().map(c => {
         const li = el('li', 'char-li');
         const wrap = el('span', 'char-thumb-wrap');
         const b = btn('char-opt', null, () => motion.tap(wrap, c));
@@ -1213,18 +1286,28 @@ export function mountUI(document, opts = {}) {
         img.alt = ''; img.width = 56; img.height = 56;
         setCharImg(img, c);
         wrap.append(img);
-        const parts = [wrap, el('span', 'char-name', c.name), el('span', 'char-item', c.motif)];
+        // R10-7：名前・モチーフの無い子は、その欄を作らない（名前は出さない）。
+        const parts = [wrap, ...(c.name ? [el('span', 'char-name', c.name)] : []), ...(c.motif ? [el('span', 'char-item', c.motif)] : [])];
         charButtons.set(c.id, {b, parts, role: el('span', 'char-role', ''), c});
         li.append(b);
         return li;
       }));
     }
+    // R10-6：主役はアプリを開くたびに変わるので、札は「きょうの主役」「きょうのなかま」と、ほかのタブの場所を並べる。
     const p = place();
+    const st = stage();
     for (const [, {b, parts, role, c}] of charButtons) {
-      const where = placeOf(p, c.id);
-      role.textContent = where ? PLACE_TEXT[where] : '';
-      b.className = 'char-opt' + (where === 'today' ? ' is-today' : '');
-      b.setAttribute('aria-label', c.name + '（' + c.motif + '）' + (where ? '、きょうは' + PLACE_TEXT[where] : ''));
+      const at = placeOf(p, c.id);
+      const tags = [];
+      if (st.lead.id === c.id) tags.push(PLACE_TEXT.today);
+      else if (st.friends.some(f => f.id === c.id)) tags.push(STAGE_FRIEND_TEXT);
+      if (at && at !== 'today') tags.push(PLACE_TEXT[at]);
+      const where = tags.join('・');
+      role.textContent = where;
+      b.className = 'char-opt' + (st.lead.id === c.id ? ' is-today' : '');
+      const sr = getSeries(prefs.series);
+      const who = c.name ? c.name + (c.motif ? '（' + c.motif + '）' : '') : sr.label + 'の' + (sr.characters.indexOf(c) + 1) + '体め';
+      b.setAttribute('aria-label', who + (where ? '、きょうは' + where : ''));
       b.replaceChildren(...parts, ...(where ? [role] : []));
     }
   }
@@ -1233,14 +1316,15 @@ export function mountUI(document, opts = {}) {
     motion.setMode(prefs.motion);
     syncIdle();
   }
-  function setPref(patch, msg) {
+  function setPref(patch, msg, statusId = 'char-status') {
     const clean = cleanPrefs(patch);
     localPrefs = {...localPrefs, ...clean};
     writeLocalPrefs(opts.storage, localPrefs);
     prefOverride = {...prefOverride, ...clean};
     applyPrefs();
+    if ('series' in clean) { charListBuilt = false; charButtons.clear(); }
     renderAll();
-    const status = $('char-status');
+    const status = $(statusId);
     status.textContent = msg || '';
     if (!store) return;
     const res = store.setPrefs(clean);
@@ -1249,6 +1333,103 @@ export function mountUI(document, opts = {}) {
     res.write.then(() => {
       for (const k of Object.keys(clean)) if (prefOverride[k] === clean[k] && state.prefs && state.prefs[k] === clean[k]) delete prefOverride[k];
     }, () => { status.textContent = (msg ? msg + '。' : '') + 'この端末にだけ保存しました（アカウントには保存できませんでした）'; });
+  }
+
+  // ---- R10-6：ふたりのことば（贈り合い） ----
+  //   いちばん新しく相手から届いたことばを目立つところに。「言葉を贈る」で書いて贈る。「これまでのことば」で履歴。
+  //   役割（夫／妻）をはっきり選んだアカウントだけが贈れる（推測した役割では贈らない。ルールでも確かめる）。
+  let giftOpen = false, giftHistoryOpen = false, giftSeen = null;
+  const GIFT_SEEN_KEY = 'sango-gift-seen';
+  const canGift = () => { const r = myRoleInfo(); return Boolean(r.role) && !r.inferred; };
+  function renderGifts() {
+    const r = myRoleInfo();
+    const role = r.role;
+    const partner = partnerOf(role);
+    const latest = role ? latestReceived(state.gifts, role) : null;
+    $('gift-title').textContent = partner ? GIFT_FROM_LABEL[partner] : GIFT_TEXT.title;
+    $('gift-text').textContent = latest ? latest.text : GIFT_TEXT.none;
+    $('gift-text').className = 'gift-text' + (latest ? '' : ' is-empty');
+    $('gift-when').textContent = latest ? giftWhen(latest.createdAt) + 'に届きました' : '';
+    $('gift-when').hidden = !latest;
+    const ok = canGift();
+    $('gift-note').hidden = ok;
+    $('gift-note').textContent = ok ? '' : GIFT_TEXT.needRole;
+    $('gift-open').disabled = !ok;
+    $('gift-open').setAttribute('aria-expanded', String(giftOpen && ok));
+    $('gift-compose').hidden = !(giftOpen && ok);
+    $('gift-to-label').textContent = partner ? GIFT_TO_LABEL[partner] : '贈ることば';
+    syncGiftCount();
+    $('gift-history-btn').setAttribute('aria-expanded', String(giftHistoryOpen));
+    $('gift-history-btn').textContent = giftHistoryOpen ? GIFT_TEXT.historyClose : GIFT_TEXT.history;
+    $('gift-history').hidden = !giftHistoryOpen;
+    if (giftHistoryOpen) {
+      const list = giftHistory(state.gifts);
+      $('gift-list').replaceChildren(...list.map(g => {
+        const li = el('li', 'gift-li' + (g.to === role ? ' is-received' : ' is-sent'));
+        li.setAttribute('data-id', g.id);
+        li.append(el('span', 'gift-li-head', giftHeading(g)), el('span', 'gift-li-text', g.text));
+        return li;
+      }));
+      $('gift-empty').hidden = list.length > 0;
+    }
+  }
+  function syncGiftCount() {
+    const n = charCount($('gift-input').value || '');
+    $('gift-count').textContent = n + ' / ' + GIFT_MAX;
+    $('gift-count').className = 'small gift-count' + (n > GIFT_MAX ? ' is-over' : '');
+    $('gift-send').disabled = n === 0 || n > GIFT_MAX;
+  }
+  function openGift() {
+    if (!canGift()) return;
+    giftOpen = !giftOpen;
+    $('gift-error').textContent = '';
+    if (giftOpen) $('gift-status').textContent = '';
+    renderGifts();
+    if (giftOpen) focus($('gift-input'));
+  }
+  function sendGift() {
+    if (!store) return;
+    const role = myRoleInfo().inferred ? null : myRole();
+    const v = validateGift($('gift-input').value, role);
+    if (!v.ok) { $('gift-error').textContent = v.errors.join('。'); return; }
+    const res = store.sendGift(v.value.text, role);
+    if (!res.ok) { $('gift-error').textContent = res.errors.join('。'); return; }
+    $('gift-error').textContent = '';
+    const status = $('gift-status');
+    const queued = isOffline();
+    status.textContent = queued ? GIFT_TEXT.queued : GIFT_TEXT.sending;
+    status.className = 'save-status is-' + (queued ? 'queued' : 'saving');
+    $('gift-input').value = '';
+    giftOpen = false;
+    renderGifts();
+    Promise.resolve(res.write).then(() => {
+      status.textContent = GIFT_TEXT.sent + '（' + GIFT_FROM_LABEL[role] + 'として相手の「きょう」に出ます）';
+      status.className = 'save-status is-saved';
+      toast(GIFT_TEXT.sent);
+      playSaved();
+    }, () => {
+      status.textContent = GIFT_TEXT.failed;
+      status.className = 'save-status is-failed';
+      addSaveError('gift:' + res.id, 'ことば', GIFT_TEXT.failed);
+    });
+  }
+  // 相手から新しいことばが届いたら（アプリを開いている間だけ）知らせる。開いたときにすでにあったものは知らせない。
+  function readGiftSeen() { try { const v = opts.storage ? Number(opts.storage.getItem(GIFT_SEEN_KEY)) : 0; return Number.isFinite(v) ? v : 0; } catch { return 0; } }
+  function writeGiftSeen(v) { try { if (opts.storage) opts.storage.setItem(GIFT_SEEN_KEY, String(v)); } catch { /* ignore */ } }
+  function checkGiftArrivals() {
+    const role = myRole();
+    if (!role || !state.giftsLoaded) return [];
+    const rec = receivedGifts(state.gifts, role);
+    const newest = rec.length ? giftMs(rec[0].createdAt) : 0;
+    if (giftSeen === null) { giftSeen = Math.max(newest, readGiftSeen()); writeGiftSeen(giftSeen); return []; }
+    const fresh = rec.filter(g => giftMs(g.createdAt) > giftSeen);
+    if (!fresh.length) return [];
+    giftSeen = newest;
+    writeGiftSeen(giftSeen);
+    const partner = partnerOf(role);
+    toast(GIFT_FROM_LABEL[partner] + 'が届きました');
+    notifier.say('gift:' + fresh[0].id, partner === 'wife' ? GIFT_TEXT.notifyTitleWife : GIFT_TEXT.notifyTitleHusband, GIFT_TEXT.notifyBody);
+    return fresh;
   }
 
   // ---- photos ----
@@ -1298,6 +1479,7 @@ export function mountUI(document, opts = {}) {
     renderAttention();
     renderChara();
     renderWord();
+    renderGifts();
     renderDayGroups();
     renderNotifyLine();
     renderWeek();
@@ -1322,6 +1504,7 @@ export function mountUI(document, opts = {}) {
     if (!setupShown && state.familyLoaded && (!state.family || !myRole())) openSetup();
     maybeWelcome();
     runNotify();
+    checkGiftArrivals();
   }
 
   // 日付が変わったら作り直す（0:00 のタイマー・画面に戻ったとき）。
@@ -1366,6 +1549,11 @@ export function mountUI(document, opts = {}) {
   $('birth-before').onclick = openBirth;
   $('birth-change').onclick = openBirth;
   $('word-setup').onclick = openSetup;
+  $('gift-open').onclick = openGift;
+  $('gift-cancel').onclick = () => { giftOpen = false; $('gift-error').textContent = ''; renderGifts(); focus($('gift-open')); };
+  $('gift-send').onclick = sendGift;
+  $('gift-input').oninput = syncGiftCount;
+  $('gift-history-btn').onclick = () => { giftHistoryOpen = !giftHistoryOpen; renderGifts(); };
   $('notify-btn').onclick = async () => {
     if (notifier.enabled()) notifier.disable();
     else {
@@ -1451,6 +1639,7 @@ export function mountUI(document, opts = {}) {
   }
 
   guard.start();
+  stroll.start();
   scheduleMidnight();
   scheduleNotifyTick();
   render();
@@ -1465,6 +1654,9 @@ export function mountUI(document, opts = {}) {
     guard,
     notifier,
     motion,
+    stroll,
+    leadIndex,
+    get stage() { return stage(); },
     isDirty,
     get tab() { return tab; },
     get prefs() { return {...prefs}; },

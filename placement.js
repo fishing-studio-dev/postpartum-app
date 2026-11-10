@@ -33,3 +33,24 @@ export function placeOf(placement, id) {
   for (const place of PLACES) if (placement[place] && placement[place].id === id) return place;
   return null;
 }
+
+// ---- R10-6：きょうに出る3体と、その日の主役 ----
+//   3体は、選んだシリーズの中から日付で決まる（rotated[0]・rotated[1]・rotated[2]。同じ日はいつ開いても同じ3体）。
+//   主役（大きく出る子）は、その3体の中から「アプリを開くたびに」ランダムに選ぶ（ご本人の希望。日付だけでは決まらない）。
+//   random は 0 以上 1 未満を返す関数（app.js が起動のときに渡す。テストでは固定の値）。ここでは乱数を作らない（日付だけ）。
+export const TRIO_SIZE = 3;
+export function trioFor(ymd, list = MOCHI) {
+  return Object.freeze(placementFor(ymd, list).rotated.slice(0, Math.min(TRIO_SIZE, list.length)));
+}
+export function pickLeadIndex(random, size = TRIO_SIZE) {
+  let r = 0;
+  try { r = typeof random === 'function' ? Number(random()) : 0; } catch { r = 0; }
+  if (!Number.isFinite(r) || r < 0) r = 0;
+  return Math.min(size - 1, Math.floor(r * size));
+}
+// 主役を先頭にした3体（主役・なかま・なかま）。leadIndex は pickLeadIndex() の結果。
+export function stageFor(ymd, list, leadIndex) {
+  const trio = trioFor(ymd, list);
+  const k = ((Number(leadIndex) || 0) % trio.length + trio.length) % trio.length;
+  return Object.freeze({date: String(ymd || ''), trio, lead: trio[k], leadIndex: k, friends: Object.freeze(trio.filter((_, i) => i !== k))});
+}

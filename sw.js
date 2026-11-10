@@ -1,4 +1,4 @@
-/* R10-5 service worker（R9 と同じしくみ）。
+/* R10-6 service worker（R9 と同じしくみ）。
    いま：餅の家族10体（art/char_mochi_v4_*.webp）・きょうの背景・アイコン、タブ／アプリのアイコン（はなっぱ、icons/*-hana-*.png）は最初から入れる。
    うさぎ・くま などの古い絵（chars/*.svg、art/ の古い WebP）は画面では使わない。万一使われたときだけ、使うときに入れる。
    アプリのファイル（相対パス）と、firebase-config.js で固定した
@@ -26,7 +26,16 @@ importScripts('./firebase-config.js');
 //   最初から入れる一覧から ./chars/rabbit.svg と古いアイコン（icons/icon-192.png・icon-512.png・apple-touch-icon-180.png）を外し、
 //   はなっぱ のアイコン4枚（icons/icon-hana-192.png・icon-hana-512.png・apple-touch-icon-hana-180.png・favicon-hana-48.png）を入れた。
 //   古いファイル自体は site/ に残している（使っていない）。chars/ の SVG は、万一使われても chars/ の経路（使うときに入れる）で出る。
-const VERSION = 'r10-5-2026-11-10-1';
+// R10-6：名言調のことば（words.js）・ふたりのことば（gifts.js）・キャラのシリーズ（chars/series.js）・きょうの3体の動き（stroll.js）を足したので
+//   r10-6-2026-11-10-1 に上げた。新しい3ファイルを最初から入れる一覧に足した。しくみ（install・activate・fetch）は変えていない。
+//   words-210.js はもう画面では使わないが、ファイルも一覧もそのまま残している。
+// R10-6 見出しの直し：雲の見出し（きょう・1週間・まだ未定・やること・アルバム・設定）の字を、同じオリジンに置いた
+//   Kiwi Maru Medium（SIL OFL 1.1・見出しの字だけに絞った WOFF）にしたので r10-6-2026-11-10-2 に上げ、そのファイルとライセンス文を最初から入れる一覧に足した。
+// R10-7：キャラのシリーズ2〜5（フェルト・ドット絵・刺しゅう・編みぐるみ、各10体）を足したので r10-7-2026-11-11-1 に上げた。
+//   chars/series-art.js と40枚の絵（art/char_felt_* / char_pixel_* / char_embroidery_* / char_crochet_*）を最初から入れる一覧に足した（シリーズ1と同じ扱い）。
+//   しくみ（install・activate・fetch）は変えていない。
+// R10-7-2：キャラの名前が途中で折れないように直した（ui.js・style.css）。絵の大きさを面積でそろえ直した。しくみは同じ。
+const VERSION = 'r10-7-2026-11-11-2';
 const PREFIX = 'postpartum-r9-';
 const LEGACY_PREFIXES = ['postpartum-r8-', 'postpartum-r7-', 'postpartum-r6-', 'postpartum-r5-'];
 const CACHE = PREFIX + VERSION;
@@ -52,6 +61,50 @@ const FILES = [
   './prefs.js',
   './chars/registry.js',
   './placement.js',
+  './chars/series.js',
+  './chars/series-art.js',
+  './art/char_felt_01_penguin.webp',
+  './art/char_felt_02_bear.webp',
+  './art/char_felt_03_seal.webp',
+  './art/char_felt_04_rabbit.webp',
+  './art/char_felt_05_fox.webp',
+  './art/char_felt_06_otter.webp',
+  './art/char_felt_07_sparrow.webp',
+  './art/char_felt_08_cat.webp',
+  './art/char_felt_09_dog.webp',
+  './art/char_felt_10_owl.webp',
+  './art/char_pixel_01_sprout_heart.webp',
+  './art/char_pixel_02_clover.webp',
+  './art/char_pixel_03_cactus.webp',
+  './art/char_pixel_04_acorn.webp',
+  './art/char_pixel_05_bellflower.webp',
+  './art/char_pixel_06_mushroom.webp',
+  './art/char_pixel_07_fern.webp',
+  './art/char_pixel_08_radish.webp',
+  './art/char_pixel_09_sunflower.webp',
+  './art/char_pixel_10_peapod.webp',
+  './art/char_embroidery_01_hedgehog.webp',
+  './art/char_embroidery_02_squirrel.webp',
+  './art/char_embroidery_03_fawn.webp',
+  './art/char_embroidery_04_rabbit.webp',
+  './art/char_embroidery_05_mouse.webp',
+  './art/char_embroidery_06_robin.webp',
+  './art/char_embroidery_07_fox.webp',
+  './art/char_embroidery_08_badger.webp',
+  './art/char_embroidery_09_frog.webp',
+  './art/char_embroidery_10_owl.webp',
+  './art/char_crochet_01_lamb.webp',
+  './art/char_crochet_02_bunny.webp',
+  './art/char_crochet_03_bear.webp',
+  './art/char_crochet_04_duck.webp',
+  './art/char_crochet_05_puppy.webp',
+  './art/char_crochet_06_cat.webp',
+  './art/char_crochet_07_alpaca.webp',
+  './art/char_crochet_08_dinosaur.webp',
+  './art/char_crochet_09_whale.webp',
+  './art/char_crochet_10_pony.webp',
+  './stroll.js',
+  './gifts.js',
   './art/char_mochi_v4_01_flower.webp',
   './art/char_mochi_v4_02_raincloud.webp',
   './art/char_mochi_v4_03_pear.webp',
@@ -75,6 +128,8 @@ const FILES = [
   './art/icon_documents.webp',
   './item-icons.js',
   './style.css',
+  './fonts/KiwiMaru-Medium-title.woff',
+  './fonts/OFL-KiwiMaru.txt',
   './manifest.webmanifest',
   './sw.js',
   './icons/icon-hana-192.png',

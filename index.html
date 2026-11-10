@@ -29,6 +29,7 @@
 <h1 class="app-title">産後アプリ</h1>
 <button id="login-btn" type="button" class="big">Googleでログイン</button>
 <p id="login-msg" class="login-msg" role="status" aria-live="polite"></p>
+<p id="login-gift-note" class="small login-gift-note">ログインすると、夫婦でことばを贈り合えます</p>
 </section>
 
 <div id="app" class="app" data-motion-mode="standard" hidden>
@@ -49,6 +50,12 @@
 <div id="birth-after" class="birth-after" hidden><p class="birth-after-text"><span id="birth-days" class="birth-days"></span><span id="birth-note" class="small"></span></p><button id="birth-change" type="button" class="soft-btn small-btn">変更</button></div>
 </div>
 </div>
+<div id="chara-stage" class="chara-stage deco" aria-hidden="true">
+<span id="stage-a0" class="stage-actor is-lead" data-pos="0" data-face="r"><img id="stage-img0" class="stage-chara" alt="" aria-hidden="true" width="88" height="88"></span>
+<span id="stage-a1" class="stage-actor" data-pos="3" data-face="r"><img id="stage-img1" class="stage-chara" alt="" aria-hidden="true" width="64" height="64"></span>
+<span id="stage-a2" class="stage-actor" data-pos="6" data-face="l"><img id="stage-img2" class="stage-chara" alt="" aria-hidden="true" width="64" height="64"></span>
+</div>
+<p id="stage-caption" class="stage-caption small"></p>
 <section id="attention" class="card stitch attention" aria-labelledby="attention-title" hidden>
 <button id="attention-toggle" type="button" class="att-summary" aria-expanded="false" aria-controls="attention-body"><span class="att-ribbon">先に確認</span><span id="attention-first" class="att-first"></span><span id="attention-count" class="count-chip"></span></button>
 <div id="attention-body" class="attention-body" hidden>
@@ -66,6 +73,24 @@
 <div class="row-actions word-actions"><button id="word-full" type="button" class="soft-btn small-btn" aria-expanded="false" aria-controls="word-text">全文</button><button id="chara-rest" type="button" class="soft-btn small-btn">ひと休み</button></div>
 <button id="word-setup" type="button" class="soft-btn small-btn" hidden>夫か妻かを選ぶ</button>
 <span class="bow bow-bottom" aria-hidden="true"></span>
+</div>
+</section>
+<section id="gift-card" class="card stitch gift-card" aria-labelledby="gift-title">
+<h3 id="gift-title" class="card-title gift-title">ふたりのことば</h3>
+<p id="gift-text" class="gift-text"></p>
+<p id="gift-when" class="small gift-when"></p>
+<p id="gift-note" class="small gift-note" hidden></p>
+<div class="row-actions gift-actions"><button id="gift-open" type="button" class="big gift-open" aria-expanded="false" aria-controls="gift-compose">言葉を贈る</button><button id="gift-history-btn" type="button" class="soft-btn small-btn" aria-expanded="false" aria-controls="gift-history">これまでのことば</button></div>
+<div id="gift-compose" class="gift-compose" hidden>
+<label class="field gift-field"><span id="gift-to-label" class="gift-to-label">贈ることば</span><textarea id="gift-input" class="gift-input" rows="4" maxlength="400" autocomplete="off" aria-describedby="gift-count"></textarea></label>
+<p id="gift-count" class="small gift-count">0 / 200</p>
+<p id="gift-error" class="error" role="alert"></p>
+<div class="row-actions"><button id="gift-send" type="button" class="big">贈る</button><button id="gift-cancel" type="button" class="soft-btn">やめる</button></div>
+</div>
+<p id="gift-status" class="save-status" role="status" aria-live="polite"></p>
+<div id="gift-history" class="gift-history" hidden>
+<ul id="gift-list" class="gift-list" aria-label="これまでのことば"></ul>
+<p id="gift-empty" class="small" hidden>まだありません</p>
 </div>
 </section>
 <section class="card stitch days-card" aria-labelledby="days-title">
@@ -159,7 +184,10 @@
 <p class="set-text">音は出ません</p>
 </section>
 <section class="card stitch set-group" aria-labelledby="sg-view"><h3 id="sg-view" class="card-title">表示</h3>
-<p class="set-text">キャラクター（日によって出る場所が変わります。触ると動きます）</p>
+<p class="set-text">好きなキャラクターのシリーズ（10シリーズ・各10体。いま選べるのはシリーズ1〜5です）</p>
+<div id="series-list" class="series-list" role="radiogroup" aria-label="キャラクターのシリーズ"></div>
+<p id="series-status" class="small" role="status" aria-live="polite"></p>
+<p class="set-text">キャラクター（日によって出る場所が変わります。きょうは3体が出て、主役はアプリを開くたびに変わります。触ると動きます）</p>
 <ul id="char-list" class="char-list" aria-label="キャラクター"></ul>
 <p id="char-status" class="small" role="status" aria-live="polite"></p>
 <p class="small">文字の大きさは、端末やブラウザの文字サイズの設定に合わせて変わります。</p>

@@ -52,6 +52,8 @@ export async function boot(win, loadModule = url => import(url)) {
     matchMedia: typeof win.matchMedia === 'function' ? q => win.matchMedia(q) : undefined,
     IntersectionObserver: typeof win.IntersectionObserver === 'function' ? win.IntersectionObserver : undefined,
     clock: () => Date.now(),
+    // R10-6：きょうの主役をアプリを開くたびに選ぶため・3体の歩く／遊ぶを選ぶための乱数（ここだけで Math.random を使う）。
+    random: () => Math.random(),
     now: () => new Date(),
     today: () => todayLocal(new Date()),
     isOnline: () => isOnline(win),

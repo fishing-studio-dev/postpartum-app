@@ -1,13 +1,32 @@
-/* R9.2 service worker（R9 と同じしくみ。キャッシュの名前だけ新しくした）。アプリのファイル（相対パス）と、firebase-config.js で固定した
+/* R10-5 service worker（R9 と同じしくみ）。
+   いま：餅の家族10体（art/char_mochi_v4_*.webp）・きょうの背景・アイコン、タブ／アプリのアイコン（はなっぱ、icons/*-hana-*.png）は最初から入れる。
+   うさぎ・くま などの古い絵（chars/*.svg、art/ の古い WebP）は画面では使わない。万一使われたときだけ、使うときに入れる。
+   アプリのファイル（相対パス）と、firebase-config.js で固定した
    Firebase SDK の3ファイルだけをキャッシュする。Firestore / Auth / googleapis への通信と
    GET 以外のリクエストには一切さわらない。利用者のデータは保存しない。
-   キャラクターの画像は、最初のうさぎだけを先に入れる。ほかの子（chars/ の中）は、選んで初めて使うときに
+   画像（chars/ と art/ の中）で先に入れていないものは、初めて使うときに
    取りに行き、そのときキャッシュに入れる（同じ場所の GET だけ。次からはキャッシュから出す）。
    通知は「アプリを開いている間」にページから出すものだけ（Push は使わない）。 */
 'use strict';
 importScripts('./firebase-config.js');
-// R9.2：キャッシュ名は postpartum-r9-r9-2-2026-11-10-1。R9.1（postpartum-r9-r9-1-2026-11-10-1）と R9 の古い名前は PREFIX が同じなので activate で消える。
-const VERSION = 'r9-2-2026-11-10-1';
+// R10-2：キャッシュ名は postpartum-r9-r10-2-2026-11-10-1（全タブの見た目・アイコン5枚・item-icons.js を足したので上げた）。
+//   アイコン5枚（art/icon_*.webp、合計 140,284 バイト）は最初から入れる。くま・ハムスターは今までどおり使うときに入れる。
+// R10：キャッシュ名は postpartum-r9-r10-2026-11-10-2（R10 追補1 で -1 から上げた。PREFIX は R9 のまま）。
+// R10 の -1・-2 と R9.2 / R9.1 / R9 の古い名前は PREFIX が同じなので activate で消える。
+// R10-2 追補1：style.css を直したので -1 → -2。
+// R10-3 プレビュー：キャラの絵を最後のZIP（餅の家族）の3枚に替えたので r10-3-preview-2026-11-10-1 に上げた。
+//   しくみは今までと同じ：主役（art/char_mochi_flower.webp）は最初から入れ、仲間2体
+//   （art/char_mochi_raincloud.webp・art/char_mochi_pear.webp）は使うときに入れる。
+//   使わなくなった R10 の char_rabbit_apricot.webp は最初から入れる一覧から外した（ファイルは art/ に残る）。
+// R10-4：餅の家族10体（art/char_mochi_v4_*.webp、合計 361,012 バイト）と placement.js を足したので r10-4-2026-11-10-1 に上げた。
+//   しくみは今までと同じ（FILES は最初から入れる。art/ の絵は同じ経路でキャッシュから出す）。
+//   日によって「きょう」の子が10体を回るので、10枚とも最初から入れる（オフラインでもどの日の子も出るように）。
+//   使わなくなった R10-3 の char_mochi_flower.webp は最初から入れる一覧から外した（ファイルは art/ に残る。万一使っても art/ の経路で入る）。
+// R10-5：タブ・アプリのアイコンをうさぎから はなっぱ に替えたので r10-5-2026-11-10-1 に上げた。
+//   最初から入れる一覧から ./chars/rabbit.svg と古いアイコン（icons/icon-192.png・icon-512.png・apple-touch-icon-180.png）を外し、
+//   はなっぱ のアイコン4枚（icons/icon-hana-192.png・icon-hana-512.png・apple-touch-icon-hana-180.png・favicon-hana-48.png）を入れた。
+//   古いファイル自体は site/ に残している（使っていない）。chars/ の SVG は、万一使われても chars/ の経路（使うときに入れる）で出る。
+const VERSION = 'r10-5-2026-11-10-1';
 const PREFIX = 'postpartum-r9-';
 const LEGACY_PREFIXES = ['postpartum-r8-', 'postpartum-r7-', 'postpartum-r6-', 'postpartum-r5-'];
 const CACHE = PREFIX + VERSION;
@@ -32,17 +51,41 @@ const FILES = [
   './motion.js',
   './prefs.js',
   './chars/registry.js',
-  './chars/rabbit.svg',
+  './placement.js',
+  './art/char_mochi_v4_01_flower.webp',
+  './art/char_mochi_v4_02_raincloud.webp',
+  './art/char_mochi_v4_03_pear.webp',
+  './art/char_mochi_v4_04_nightstar.webp',
+  './art/char_mochi_v4_05_shell.webp',
+  './art/char_mochi_v4_06_acorn.webp',
+  './art/char_mochi_v4_07_owl.webp',
+  './art/char_mochi_v4_08_fern.webp',
+  './art/char_mochi_v4_09_ripple.webp',
+  './art/char_mochi_v4_10_fox.webp',
+  './art/bg_sky.webp',
+  './art/bg_cloud_header.webp',
+  './art/bg_cloud_small_01.webp',
+  './art/bg_cloud_small_02.webp',
+  './art/bg_grass_flowers.webp',
+  './art/bg_ribbon_pink.webp',
+  './art/icon_basket.webp',
+  './art/icon_toilet_paper.webp',
+  './art/icon_pump_bottle.webp',
+  './art/icon_photo.webp',
+  './art/icon_documents.webp',
+  './item-icons.js',
   './style.css',
   './manifest.webmanifest',
   './sw.js',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/apple-touch-icon-180.png'
+  './icons/icon-hana-192.png',
+  './icons/icon-hana-512.png',
+  './icons/apple-touch-icon-hana-180.png',
+  './icons/favicon-hana-48.png'
 ];
 const SCOPE = new URL('./', self.location.href).href;
 const INDEX = new URL('./index.html', self.location.href).href;
 const CHARS = new URL('./chars/', self.location.href).href;
+const ART = new URL('./art/', self.location.href).href;
 
 // Navigation responses must not be marked as redirected (Safari refuses them).
 function clean(response) {
@@ -54,6 +97,15 @@ function cacheSdk(cache) {
   return Promise.all(SDK_URLS.map(url => fetch(new Request(url, {mode: 'cors', credentials: 'omit'}))
     .then(res => (res && res.ok ? cache.put(url, res) : undefined))
     .catch(() => undefined)));
+}
+
+// 同じ場所の画像（chars/ と art/）：キャッシュにあればそれ、無ければ取りに行って入れる（GET だけ）。
+function cacheOnUse(request, url) {
+  const key = url.origin + url.pathname;
+  return caches.open(CACHE).then(cache => cache.match(key).then(hit => hit || fetch(request).then(res => {
+    if (res && res.ok) cache.put(key, res.clone());
+    return res;
+  })));
 }
 
 self.addEventListener('install', event => {
@@ -85,11 +137,12 @@ self.addEventListener('fetch', event => {
   const navigate = request.mode === 'navigate';
   // キャラクター画像（chars/）：キャッシュにあればそれ、無ければ取りに行って入れる。
   if (url.href.startsWith(CHARS)) {
-    const key = url.origin + url.pathname;
-    event.respondWith(caches.open(CACHE).then(cache => cache.match(key).then(hit => hit || fetch(request).then(res => {
-      if (res && res.ok) cache.put(key, res.clone());
-      return res;
-    }))));
+    event.respondWith(cacheOnUse(request, url));
+    return;
+  }
+  // R10：art/ の絵も同じ（先に入れたものはキャッシュから、先に入れていない古い絵は初めて使うときに入れる）。
+  if (url.href.startsWith(ART)) {
+    event.respondWith(cacheOnUse(request, url));
     return;
   }
   event.respondWith(caches.open(CACHE)

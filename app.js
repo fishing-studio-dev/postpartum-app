@@ -29,8 +29,9 @@ export function downloadText(win, text, fileName, type = 'text/calendar;charset=
 }
 // アプリを開いている間の通知。Android の Chrome は new Notification() が使えないので、
 // 登録済みの Service Worker の showNotification を先に使う（Push API は使わない）。
+// R10-5：通知のアイコンもアプリのアイコン（はなっぱ）に合わせた（古い icons/icon-192.png は最初から入れる一覧から外したため）。
 export async function showNotification(win, title, options) {
-  const o = {icon: './icons/icon-192.png', badge: './icons/icon-192.png', ...options};
+  const o = {icon: './icons/icon-hana-192.png', badge: './icons/icon-hana-192.png', ...options};
   try {
     const sw = win.navigator && win.navigator.serviceWorker;
     const reg = sw && typeof sw.getRegistration === 'function' ? await sw.getRegistration() : null;

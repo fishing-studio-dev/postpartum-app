@@ -13,19 +13,19 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>産後アプリ</title>
 <link rel="manifest" href="./manifest.webmanifest">
-<link rel="icon" type="image/svg+xml" href="./chars/rabbit.svg">
-<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
-<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-180.png">
+<link rel="icon" type="image/png" sizes="48x48" href="./icons/favicon-hana-48.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-hana-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon-hana-180.png">
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
 <section id="loading" class="screen center">
-<img class="chara-login deco" src="./chars/rabbit.svg" alt="" aria-hidden="true" width="112" height="112">
+<img id="loading-chara" class="chara-login deco" src="./art/char_mochi_v4_01_flower.webp" alt="" aria-hidden="true" width="112" height="112">
 <p class="loading-text">ひらいています…</p>
 </section>
 
 <section id="login" class="screen center" hidden>
-<img class="chara-login deco" src="./chars/rabbit.svg" alt="" aria-hidden="true" width="120" height="120">
+<img id="login-chara" class="chara-login deco" src="./art/char_mochi_v4_01_flower.webp" alt="" aria-hidden="true" width="120" height="120">
 <h1 class="app-title">産後アプリ</h1>
 <button id="login-btn" type="button" class="big">Googleでログイン</button>
 <p id="login-msg" class="login-msg" role="status" aria-live="polite"></p>
@@ -41,59 +41,75 @@
 
 <main>
 <section id="tab-today" class="tab" role="tabpanel" aria-labelledby="tab-btn-today">
-<div class="screen-head"><h2 class="screen-title ribbon">きょう</h2><p class="screen-sub"><span id="today-date" class="today-date"></span><span id="role-label" class="role-label"></span></p></div>
+<div class="screen-head today-head"><h2 class="screen-title ribbon">きょう</h2></div>
+<div id="date-band" class="date-band">
+<p class="screen-sub date-chip"><span id="today-date" class="today-date"></span><span class="role-chip"><span id="role-short" class="role-short" aria-hidden="true"></span><span id="role-label" class="role-label visually-hidden"></span></span></p>
 <div id="birth-card" class="birth-card">
 <button id="birth-before" type="button" class="birth-big"><span class="birth-big-text">生まれたらここをタップ</span><span id="birth-due" class="birth-due"></span></button>
 <div id="birth-after" class="birth-after" hidden><p class="birth-after-text"><span id="birth-days" class="birth-days"></span><span id="birth-note" class="small"></span></p><button id="birth-change" type="button" class="soft-btn small-btn">変更</button></div>
 </div>
+</div>
 <section id="attention" class="card stitch attention" aria-labelledby="attention-title" hidden>
-<h3 id="attention-title" class="card-title">確認が必要なこと</h3>
+<button id="attention-toggle" type="button" class="att-summary" aria-expanded="false" aria-controls="attention-body"><span class="att-ribbon">先に確認</span><span id="attention-first" class="att-first"></span><span id="attention-count" class="count-chip"></span></button>
+<div id="attention-body" class="attention-body" hidden>
+<h3 id="attention-title" class="card-title att-list-title">確認が必要なこと</h3>
 <ul id="attention-list" class="attention-list"></ul>
 <button id="attention-more" type="button" class="soft-btn small-btn" aria-expanded="false">すべて見る</button>
+</div>
 </section>
-<section id="word-card" class="card stitch word-card" aria-labelledby="word-title">
+<section id="word-card" class="word-card" aria-labelledby="word-title">
 <div id="chara-box" class="chara-box"><div id="chara-wrap" class="chara-wrap" aria-hidden="true"><img id="chara-img" class="chara-img" alt="" width="104" height="104"></div></div>
-<div class="word-body">
-<h3 id="word-title" class="card-title ribbon-sm">今日のことば</h3>
+<div class="word-body card stitch">
+<span class="bow bow-left" aria-hidden="true"></span><span class="bow bow-right" aria-hidden="true"></span>
+<h3 id="word-title" class="card-title word-title">今日のことば</h3>
 <p id="word-text" class="word-text is-clamped"></p>
 <div class="row-actions word-actions"><button id="word-full" type="button" class="soft-btn small-btn" aria-expanded="false" aria-controls="word-text">全文</button><button id="chara-rest" type="button" class="soft-btn small-btn">ひと休み</button></div>
 <button id="word-setup" type="button" class="soft-btn small-btn" hidden>夫か妻かを選ぶ</button>
+<span class="bow bow-bottom" aria-hidden="true"></span>
 </div>
 </section>
-<section class="card stitch" aria-labelledby="days-title">
-<h3 id="days-title" class="card-title">今日・明日・もうすぐ</h3>
+<section class="card stitch days-card" aria-labelledby="days-title">
+<h3 id="days-title" class="card-title days-head">今日と明日</h3>
+<p class="small days-sub">もうすぐ（3日以内）の予定もここに出ます</p>
 <div id="day-groups" class="day-groups"></div>
+<p id="today-plan-status" class="save-status" role="status" aria-live="polite"></p>
 </section>
 <button id="search-entry" type="button" class="search-entry">やることをさがす</button>
 <p id="notify-line" class="notify-line">お知らせ：アプリを開いている間のみ</p>
 </section>
 
 <section id="tab-week" class="tab" role="tabpanel" aria-labelledby="tab-btn-week" hidden>
-<div class="screen-head"><h2 class="screen-title ribbon">1週間</h2></div>
+<div class="screen-head cloud-head week-head"><h2 class="screen-title ribbon">1週間</h2><p id="w-tag" class="head-tag">今日から7日間</p><span id="w-chara-wrap" class="head-chara-wrap" aria-hidden="true"><img id="w-chara" class="head-chara deco" alt="" aria-hidden="true" width="112" height="112" hidden></span></div>
 <div class="week-nav" role="group" aria-label="日付の移動">
-<button id="w-prev" type="button" class="soft-btn">前の7日</button>
-<button id="w-today" type="button" class="soft-btn">今日</button>
-<button id="w-next" type="button" class="soft-btn">次の7日</button>
-<label class="field date-pick">日付選択<input id="w-date" type="date" min="2025-01-01" max="2030-12-31"></label>
+<button id="w-prev" type="button" class="nav-arrow" aria-label="前の7日">‹</button>
+<p id="w-range" class="week-range"></p>
+<button id="w-next" type="button" class="nav-arrow" aria-label="次の7日">›</button>
 </div>
-<div class="filter-row" role="group" aria-label="担当で絞り込み"><span class="filter-label">担当で絞り込み</span><button id="wf-husband" type="button" class="chip" aria-pressed="false">夫</button><button id="wf-wife" type="button" class="chip" aria-pressed="false">妻</button><button id="wf-both" type="button" class="chip" aria-pressed="false">2人</button></div>
-<div id="w-filter-bar" class="filter-bar" hidden><p id="w-filter-state" class="filter-state"></p><button id="w-filter-clear" type="button" class="soft-btn small-btn">解除</button></div>
 <ol id="w-strip" class="week-strip" aria-label="7日間"></ol>
-<h3 id="w-day-title" class="day-title"></h3>
+<div id="w-filter-bar" class="filter-bar" hidden><p id="w-filter-state" class="filter-state"></p><button id="w-filter-clear" type="button" class="soft-btn small-btn">解除</button></div>
+<h3 id="w-day-title" class="day-title ribbon-title"></h3>
 <div id="w-day" class="day-list"></div>
+<button id="w-decide" type="button" class="decide-pill big-decide">日時・担当を決める</button>
+<div class="week-more"><span class="week-more-label">この先の予定</span><button id="w-next-more" type="button" class="link-pill">次の7日を見る</button></div>
+<div class="week-tools card stitch">
+<div class="filter-row" role="group" aria-label="担当で絞り込み"><span class="filter-label">担当で絞り込み</span><button id="wf-husband" type="button" class="chip" aria-pressed="false">夫</button><button id="wf-wife" type="button" class="chip" aria-pressed="false">妻</button><button id="wf-both" type="button" class="chip" aria-pressed="false">2人</button></div>
+<div class="week-jump"><button id="w-today" type="button" class="soft-btn small-btn">今日にもどる</button><label class="field date-pick">ほかの日を選ぶ<input id="w-date" type="date" min="2025-01-01" max="2030-12-31"></label></div>
+</div>
 </section>
 
 <section id="tab-undecided" class="tab" role="tabpanel" aria-labelledby="tab-btn-undecided" hidden>
-<div class="screen-head"><h2 class="screen-title ribbon">まだ未定</h2><p class="screen-sub">日付か担当が決まっていない、まだ済んでいない項目</p></div>
+<div class="screen-head cloud-head undecided-head"><h2 class="screen-title ribbon">まだ未定</h2><p class="head-tag">ひとつずつ決めよう</p><span id="u-chara-wrap" class="head-chara-wrap" aria-hidden="true"><img id="u-chara" class="head-chara deco" alt="" aria-hidden="true" width="112" height="112" hidden></span></div>
+<p class="small u-sub">日付か担当が決まっていない、まだ済んでいない項目</p>
 <p id="u-count" class="small"></p>
-<p class="small">「予定は不要」を押した項目は、ここには出ません（やることで印を外せます）</p>
 <p id="u-status" class="save-status" role="status" aria-live="polite"></p>
-<ul id="u-list" class="list"></ul>
+<ul id="u-list" class="list u-cards"></ul>
 <p id="u-empty" class="empty-text" hidden>日付と担当がまだ決まっていない項目はありません</p>
+<p class="small">「予定は不要」を押した項目は、ここには出ません（やることで印を外せます）</p>
+<button id="u-to-week" type="button" class="foot-tag">決まった予定は「1週間」で確認</button>
 </section>
 
 <section id="tab-todo" class="tab" role="tabpanel" aria-labelledby="tab-btn-todo" hidden>
-<div class="screen-head"><h2 class="screen-title ribbon">やること</h2></div>
+<div class="screen-head cloud-head chara-head todo-head"><h2 class="screen-title ribbon">やること</h2><span id="t-chara-wrap" class="head-chara-wrap" aria-hidden="true"><img id="t-chara" class="head-chara deco" alt="" aria-hidden="true" width="112" height="112" hidden></span></div>
 <div class="search-row"><label class="search"><span class="visually-hidden">さがす</span><input id="q" type="search" maxlength="40" autocomplete="off" placeholder="さがす（名前・メモ・持ち物など）" enterkeyhint="search"></label><button id="q-clear" type="button" class="soft-btn small-btn" hidden>検索を消す</button></div>
 <div id="view-switch" class="seg" role="group" aria-label="表示する項目"><button id="v-all" type="button" class="seg-btn" aria-pressed="true">全件</button><button id="v-open" type="button" class="seg-btn" aria-pressed="false">未完了</button><button id="v-done" type="button" class="seg-btn" aria-pressed="false">済み</button></div>
 <div id="chips" class="chips" role="group" aria-label="分類"></div>
@@ -113,7 +129,7 @@
 <section id="tab-more" class="tab" role="tabpanel" aria-labelledby="tab-btn-more" hidden>
 <div class="seg big-seg" role="group" aria-label="アルバムと設定の切りかえ"><button id="more-album" type="button" class="seg-btn" aria-pressed="true">アルバム</button><button id="more-settings" type="button" class="seg-btn" aria-pressed="false">設定</button></div>
 <div id="pane-album" class="pane">
-<h2 class="screen-title ribbon">アルバム</h2>
+<div class="screen-head cloud-head chara-head album-head"><h2 class="screen-title ribbon">アルバム</h2><span id="a-chara-wrap" class="head-chara-wrap" aria-hidden="true"><img id="a-chara" class="head-chara deco" alt="" aria-hidden="true" width="112" height="112" hidden></span></div>
 <label class="big photo-add">写真を追加<input id="photo-input" class="visually-hidden" type="file" accept="image/*" multiple></label>
 <p class="small center-text">写真は、このアプリにログインできる2人とも追加できます</p>
 <p id="photo-status" class="hint" role="status" aria-live="polite"></p>
@@ -121,7 +137,7 @@
 <div id="photo-empty" class="empty" hidden><p>写真はまだありません</p></div>
 </div>
 <div id="pane-settings" class="pane" hidden>
-<h2 id="settings-title" class="screen-title ribbon">設定</h2>
+<div class="screen-head cloud-head"><h2 id="settings-title" class="screen-title ribbon">設定</h2></div>
 <section class="card stitch set-group" aria-labelledby="sg-family"><h3 id="sg-family" class="card-title">家族</h3>
 <p id="s-family-text" class="set-text"></p>
 <p id="s-role-text" class="set-text"></p>
@@ -143,7 +159,7 @@
 <p class="set-text">音は出ません</p>
 </section>
 <section class="card stitch set-group" aria-labelledby="sg-view"><h3 id="sg-view" class="card-title">表示</h3>
-<p class="set-text">キャラクターを選ぶ</p>
+<p class="set-text">キャラクター（日によって出る場所が変わります。触ると動きます）</p>
 <ul id="char-list" class="char-list" aria-label="キャラクター"></ul>
 <p id="char-status" class="small" role="status" aria-live="polite"></p>
 <p class="small">文字の大きさは、端末やブラウザの文字サイズの設定に合わせて変わります。</p>
@@ -156,6 +172,7 @@
 </main>
 
 <p class="foot">医療の判断は医療機関・自治体に確認してください</p>
+<div class="grass-band deco" aria-hidden="true"></div>
 <nav class="tabs" role="tablist" aria-label="画面">
 <button id="tab-btn-today" type="button" class="tab-btn" role="tab" aria-selected="true" aria-controls="tab-today">きょう</button>
 <button id="tab-btn-week" type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-week">1週間</button>

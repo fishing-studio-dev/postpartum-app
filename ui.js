@@ -18,15 +18,25 @@ import {createStroll} from './stroll.js';
 import {GIFT_MAX, GIFT_TEXT, GIFT_FROM_LABEL, GIFT_TO_LABEL, partnerOf, charCount, validateGift, latestReceived, receivedGifts, giftHistory, giftWhen, giftHeading, giftMs} from './gifts.js';
 import {createMotion} from './motion.js';
 import {resolvePrefs, readLocalPrefs, writeLocalPrefs, cleanPrefs, SERIES, getSeries} from './prefs.js';
+import {GUIDE_STEPS, GUIDE_TEXT, HELP_BANDS, readBands, writeBands, guideSeen, setGuideSeen} from './help.js';
+import {FLOW_TEXT, FLOW_CONFIRMED_KEY, flowItems, checkChoice, flowWrites} from './flow.js';
 
 export const DENIED_TEXT = 'このアプリは使えません';
 export const TABS = Object.freeze(['today', 'week', 'undecided', 'todo', 'more']);
 export const TAB_LABELS = Object.freeze({today: 'きょう', week: '1週間', undecided: 'まだ未定', todo: 'やること', more: 'アルバム・設定'});
-export const PANELS = Object.freeze(['detail', 'planner', 'editor', 'setup', 'birth', 'viewer']);
+// R10-8：flow（予定を順番に決める）・guide（使い方の案内）・reset（入力をリセット）を足した。
+export const PANELS = Object.freeze(['detail', 'planner', 'editor', 'setup', 'birth', 'viewer', 'flow', 'guide', 'reset']);
 // パネルごとの「← もどる」（上）と「とじる」（下）
 export const PANEL_BUTTONS = Object.freeze({
   detail: ['d-back', 'd-close'], planner: ['p-back', 'p-close'], editor: ['e-back', 'e-cancel'],
-  setup: ['f-back', 'f-close'], birth: ['b-back', 'b-close'], viewer: ['v-back', 'v-close']
+  setup: ['f-back', 'f-close'], birth: ['b-back', 'b-close'], viewer: ['v-back', 'v-close'],
+  flow: ['fl-back', 'fl-close'], guide: ['g-back', 'g-close'], reset: ['r-back', 'r-cancel']
+});
+// R10-8：入力をリセットで選べるもの（画面の順）。
+export const RESET_TEXT = Object.freeze({
+  plans: '予定・チェック', photos: '写真', gifts: '贈る言葉', prefs: '自分の設定',
+  none: '消すものを1つ以上選んでください', doing: '消しています…', done: '消しました', queued: 'つながったら消します',
+  failed: '消せませんでした。もう一度ためしてください'
 });
 // 保存の表示。「保存しました」は Firestore の書き込みが終わった（Promise が解決した）後だけ。
 export const SAVE_TEXT = Object.freeze({
@@ -235,7 +245,10 @@ export function mountUI(document, opts = {}) {
     detail: () => { detailId = null; },
     editor: () => { editId = null; },
     viewer: () => { viewerId = null; },
-    planner: () => { plannerId = null; }
+    planner: () => { plannerId = null; },
+    flow: () => { flow = null; },
+    guide: () => { setGuideSeen(opts.storage, true); guideIndex = 0; markGuideTab(null); },
+    reset: () => { resetStage = 1; }
   };
   const anyPanelOpen = () => PANELS.some(id => !$(id).hidden);
   function showPanel(id, replaceFrom) {
@@ -262,6 +275,7 @@ export function mountUI(document, opts = {}) {
     if (!anyPanelOpen()) blockMotion('panel', false);
     focus(opener[id]);
     opener[id] = null;
+    if (id !== 'guide') later(maybeGuide, 0);
   }
   // 確認なしで閉じる（保存できた・削除した・ログアウトなど）。
   function forceClose(id) {
@@ -335,6 +349,8 @@ export function mountUI(document, opts = {}) {
       const it = findItem(plannerId);
       return Boolean(it) && !same(planInputs('p'), planFromItem(it));
     }
+    // R10-8：流れの中で選んだことがあり、まだ確定していないとき／追加の欄に書きかけがあるとき
+    if (id === 'flow') return Boolean(flow) && ((flow.mode !== 'done' && flow.choices.size > 0) || (flow.mode === 'add' && val('fl-add-title').trim() !== ''));
     if (FORM_FIELDS[id]) return Boolean(baselines[id]) && !same(formValues(id), baselines[id]);
     return false;
   }
@@ -1471,6 +1487,305 @@ export function mountUI(document, opts = {}) {
     status.textContent = photoFailText(decodeFails, otherFails);
   }
 
+  // ==== R10-8：使い方の説明（はじめの案内・各タブの上の説明） ====
+  //   はじめて開いたとき（この端末で一度も案内を見ていないとき）だけ、キャラが話す形の案内を出す。
+  //   localStorage が使えない端末では自動では出さない（毎回出てしまうため）。設定の「使い方をもう一度見る」からはいつでも見られる。
+  let guideIndex = 0, guideAuto = false;
+  let bandsClosed = readBands(opts.storage);
+  function maybeGuide() {
+    if (guideAuto || state.auth !== 'ready' || !state.familyLoaded || !opts.storage) return;
+    if (anyPanelOpen() || !$('discard-dialog').hidden || !$('exit-dialog').hidden) return;
+    if (!state.family || !myRole()) return;   // 先に家族の設定
+    guideAuto = true;
+    if (guideSeen(opts.storage)) return;
+    openGuide();
+  }
+  function openGuide() {
+    guideIndex = 0;
+    showPanel('guide');   // フォーカスは「← もどる」（ほかのパネルと同じ）
+    renderGuide();
+  }
+  // 案内の段に合うタブに印（data-guide）。印のあいだは下のタブを暗い幕の上に出す（CSS：#app[data-guide-tab]）。
+  function markGuideTab(t) {
+    for (const x of TABS) { const b = $('tab-btn-' + x); if (b) { if (x === t) b.setAttribute('data-guide', 'on'); else b.removeAttribute('data-guide'); } }
+    const a = $('app');
+    if (a) { if (t) a.setAttribute('data-guide-tab', t); else a.removeAttribute('data-guide-tab'); }
+  }
+  function renderGuide() {
+    const n = GUIDE_STEPS.length;
+    const st = GUIDE_STEPS[Math.max(0, Math.min(guideIndex, n - 1))];
+    const last = guideIndex >= n - 1;
+    $('g-title').textContent = st.title;
+    $('g-text').textContent = st.text;
+    $('g-step').textContent = GUIDE_TEXT.step(guideIndex, n);
+    $('g-prev').hidden = guideIndex === 0;
+    $('g-next').textContent = last ? GUIDE_TEXT.finish : GUIDE_TEXT.next;
+    $('g-skip').hidden = last;
+    $('g-again').hidden = !last;
+    const img = $('g-chara');
+    if (img) setCharImg(img, currentChar());
+    markGuideTab(st.tab || null);
+  }
+  function guideMove(d) {
+    const n = GUIDE_STEPS.length;
+    if (d > 0 && guideIndex >= n - 1) { forceClose('guide'); return; }
+    guideIndex = Math.max(0, Math.min(n - 1, guideIndex + d));
+    renderGuide();
+    focus($('g-next'));
+  }
+  function guideAgain() { guideIndex = 0; renderGuide(); focus($('g-next')); }
+  function renderBands() {
+    for (const t of TABS) {
+      const b = $('hb-' + t);
+      if (!b) continue;
+      $('hb-' + t + '-text').textContent = HELP_BANDS[t];
+      b.hidden = bandsClosed.includes(t);
+    }
+  }
+  function closeBand(t) {
+    if (!bandsClosed.includes(t)) bandsClosed = [...bandsClosed, t];
+    writeBands(opts.storage, bandsClosed);
+    renderBands();
+    focus($('tab-btn-' + t));
+  }
+  function showHelpAgain() {
+    bandsClosed = [];
+    writeBands(opts.storage, bandsClosed);
+    renderBands();
+    openGuide();
+  }
+
+  // ==== R10-8：予定を順番に決める（フロー） ====
+  //   やることを1つずつ出して「日にちを入れる／あとで／済み」。最後に一覧で確定（確定したときだけ保存）。
+  //   保存は今までと同じ store.setPlan（いつ・誰が）・store.setDone（済み）・store.addItem（追加）。新しい種類のデータは作らない。
+  let flow = null;
+  const flowConfirmed = () => { try { return Boolean(opts.storage && opts.storage.getItem(FLOW_CONFIRMED_KEY)); } catch { return false; } };
+  function renderFlowEntry() {
+    const label = flowConfirmed() ? FLOW_TEXT.again : FLOW_TEXT.title;
+    for (const k of ['u', 't']) { const b = $('flow-open-' + k); if (b) b.textContent = label; }
+  }
+  function openFlow(mode = 'step') {
+    if (!store) return;
+    const ids = flowItems(state.items, settings()).map(i => i.id);
+    flow = {ids, idx: 0, choices: new Map(), mode: mode === 'add' ? 'add' : ids.length ? 'step' : 'summary', dateOpen: false, back: 'step'};
+    $('fl-status').textContent = ''; $('fl-status').className = 'save-status';
+    if (flow.mode === 'add') resetAddForm();
+    showPanel('flow');   // フォーカスは「← もどる」（ほかのパネルと同じ）
+    renderFlow();
+  }
+  function focusFlow() {
+    if (!flow) return;
+    if (flow.mode === 'step') focus($('fl-item-title'));
+    else if (flow.mode === 'summary') focus($('fl-confirm'));
+    else if (flow.mode === 'add') focus($('fl-add-title'));
+    else focus($('fl-add-open'));
+  }
+  function flowChoiceText(c) {
+    if (!c) return FLOW_TEXT.choice.later + '（まだ選んでいません）';
+    if (c.kind === 'date') return jaDate(c.planDate, today()) + (c.planTime ? ' ' + c.planTime : '') + '・' + whoSummary(c.assignee);
+    return FLOW_TEXT.choice[c.kind];
+  }
+  function renderFlow() {
+    if (!flow) return;
+    const f = flow;
+    f.ids = f.ids.filter(id => findItem(id));
+    if (f.mode === 'step' && !f.ids.length) f.mode = 'summary';
+    if (f.idx >= f.ids.length) f.idx = Math.max(0, f.ids.length - 1);
+    $('fl-title').textContent = f.mode === 'add' ? FLOW_TEXT.addTitle : FLOW_TEXT.title;
+    $('fl-step').hidden = f.mode !== 'step';
+    $('fl-summary').hidden = f.mode !== 'summary';
+    $('fl-done-box').hidden = f.mode !== 'done';
+    $('fl-add-box').hidden = f.mode !== 'add';
+    $('fl-add-open').hidden = f.mode === 'add';
+    $('fl-progress').textContent = f.mode === 'step' ? (f.idx + 1) + ' / ' + f.ids.length + '（期限の近い順）' : '';
+    if (f.mode === 'step') {
+      const it = findItem(f.ids[f.idx]);
+      const c = f.choices.get(it.id);
+      $('fl-cat').textContent = it.category || '';
+      $('fl-item-title').textContent = it.title;
+      $('fl-deadline').textContent = deadlineLabel(it, settings()) || '締切 なし';
+      $('fl-place').textContent = it.place ? '場所：' + it.place : '';
+      const p = planOf(it);
+      $('fl-current').textContent = c ? '選んだこと：' + flowChoiceText(c) : (p.planDate ? 'いまの予定：' + planWhenLabel(it) + '・' + whoSummary(p.assignee) : '');
+      for (const k of ['date', 'later', 'done']) $('fl-c-' + k).setAttribute('aria-pressed', String(Boolean(c) && c.kind === k));
+      $('fl-c-date').setAttribute('aria-expanded', String(f.dateOpen));
+      $('fl-date-box').hidden = !f.dateOpen;
+      $('fl-prev').hidden = f.idx === 0;
+    }
+    if (f.mode === 'summary') {
+      $('fl-summary-note').textContent = f.ids.length ? FLOW_TEXT.summaryNote : FLOW_TEXT.empty;
+      $('fl-list').replaceChildren(...f.ids.map((id, i) => {
+        const it = findItem(id);
+        const c = f.choices.get(id);
+        const li = el('li', 'flow-li' + (c ? ' is-' + c.kind : ''));
+        li.setAttribute('data-id', id);
+        const txt = el('span', 'flow-li-text');
+        txt.append(el('span', 'flow-li-title', it.title), el('span', 'flow-li-choice', c ? flowChoiceText(c) : FLOW_TEXT.later));
+        const ch = btn('soft-btn small-btn flow-li-change', FLOW_TEXT.change, () => { f.mode = 'step'; f.idx = i; f.dateOpen = false; renderFlow(); focusFlow(); });
+        ch.setAttribute('aria-label', '「' + it.title + '」を' + FLOW_TEXT.change);
+        li.append(txt, ch);
+        return li;
+      }));
+      $('fl-confirm').hidden = f.ids.length === 0;
+      $('fl-restart').hidden = f.ids.length === 0;
+    }
+    if (f.mode === 'done') $('fl-done-text').textContent = FLOW_TEXT.confirmed;
+  }
+  function flowPick(kind) {
+    if (!flow || flow.mode !== 'step') return;
+    const it = findItem(flow.ids[flow.idx]);
+    if (!it) return;
+    if (kind === 'date') {
+      flow.dateOpen = true;
+      const c = flow.choices.get(it.id);
+      const p = c && c.kind === 'date' ? c : planFromItem(it);
+      $('fl-date').value = p.planDate || '';
+      $('fl-time').value = p.planTime || '';
+      fillAssignee($('fl-who'), p.assignee || '');
+      $('fl-error').textContent = '';
+      renderFlow();
+      focus($('fl-date'));
+      return;
+    }
+    flow.choices.set(it.id, {kind});
+    flowNext();
+  }
+  function flowDateOk() {
+    if (!flow) return;
+    const it = findItem(flow.ids[flow.idx]);
+    if (!it) return;
+    const r = checkChoice({kind: 'date', planDate: val('fl-date'), planTime: val('fl-time'), assignee: val('fl-who')});
+    if (!r.ok) { $('fl-error').textContent = r.errors[0]; return; }
+    $('fl-error').textContent = '';
+    flow.choices.set(it.id, r.value);
+    flowNext();
+  }
+  function flowNext() {
+    flow.dateOpen = false;
+    if (flow.idx >= flow.ids.length - 1) flow.mode = 'summary';
+    else flow.idx++;
+    renderFlow();
+    focusFlow();
+  }
+  function flowPrev() { if (!flow || flow.idx === 0) return; flow.idx--; flow.dateOpen = false; renderFlow(); focusFlow(); }
+  function flowToSummary() { if (!flow) return; flow.mode = 'summary'; flow.dateOpen = false; renderFlow(); focusFlow(); }
+  function flowRestart() { if (!flow) return; flow.mode = 'step'; flow.idx = 0; flow.dateOpen = false; renderFlow(); focusFlow(); }
+  function flowConfirm() {
+    if (!flow || !store) return;
+    const f = flow;
+    const writes = flowWrites(f.choices, state.items);
+    const promises = [];
+    try {
+      for (const w of writes) {
+        if (w.kind === 'done') promises.push(store.setDone(w.id, true));
+        else { const r = store.setPlan(w.id, w.plan); if (r.ok) promises.push(r.write); }
+      }
+    } catch (e) { promises.push(Promise.reject(e)); }
+    try { if (opts.storage) opts.storage.setItem(FLOW_CONFIRMED_KEY, today()); } catch { /* ignore */ }
+    f.choices = new Map();
+    f.mode = 'done';
+    renderFlow();
+    renderFlowEntry();
+    if (!writes.length) { $('fl-status').textContent = FLOW_TEXT.nothing; $('fl-status').className = 'save-status'; focusFlow(); return; }
+    submit('flow', Promise.all(promises), {statusId: 'fl-status', title: FLOW_TEXT.title, reportFail: true, isCurrent: () => Boolean(flow) && !$('flow').hidden});
+    focusFlow();
+  }
+  function resetAddForm() {
+    $('fl-add-title').value = '';
+    $('fl-add-cat').replaceChildren(...CATEGORIES.map(c => { const o = el('option', '', c); o.value = c; return o; }));
+    $('fl-add-cat').value = '準備';
+    $('fl-add-date').value = '';
+    $('fl-add-time').value = '';
+    fillAssignee($('fl-add-who'), '');
+    $('fl-add-error').textContent = '';
+  }
+  function flowAddOpen() {
+    if (!flow) { openFlow('add'); return; }
+    flow.back = flow.mode;
+    flow.mode = 'add';
+    resetAddForm();
+    renderFlow();
+    focusFlow();
+  }
+  function flowAddSave() {
+    if (!store || !flow) return;
+    const input = {title: val('fl-add-title'), category: val('fl-add-cat') || '準備', place: '', documents: [], memo: '', sourceUrl: '',
+      planDate: val('fl-add-date'), planTime: val('fl-add-time'), assignee: val('fl-add-who')};
+    if (!input.planDate) { $('fl-add-error').textContent = FLOW_TEXT.needDate; return; }
+    const res = store.addItem(input);
+    if (!res.ok) { $('fl-add-error').textContent = res.errors[0]; return; }
+    $('fl-add-error').textContent = '';
+    const title = input.title.trim();
+    $('fl-add-title').value = '';
+    flow.mode = 'done';
+    renderFlow();
+    $('fl-done-text').textContent = '「' + title + '」を入れました。続けて入れるときは「＋ 予定を追加」。';
+    submit('flow-add', res.write, {statusId: 'fl-status', title, reportFail: true, isCurrent: () => Boolean(flow) && !$('flow').hidden});
+    focusFlow();
+  }
+
+  // ==== R10-8：入力をリセット（設定）。2回確かめてから消す。消す範囲は選べる。 ====
+  let resetStage = 1;
+  const RESET_IDS = ['plans', 'photos', 'gifts', 'prefs'];
+  const resetPicked = () => RESET_IDS.filter(k => Boolean($('r-' + k).checked));
+  function openReset() {
+    resetStage = 1;
+    for (const k of RESET_IDS) $('r-' + k).checked = false;
+    $('r-error').textContent = ''; $('r-status').textContent = ''; $('r-status').className = 'save-status';
+    showPanel('reset');
+    renderReset();
+  }
+  function renderReset() {
+    $('r-stage1').hidden = resetStage !== 1;
+    $('r-stage2').hidden = resetStage !== 2;
+    if (resetStage === 2) {
+      const c = store && store.resetCounts ? store.resetCounts(resetPicked()) : {};
+      const lines = resetPicked().map(k => {
+        if (k === 'plans') return RESET_TEXT.plans + '：やること ' + (c.plans || 0) + '件をはじめの状態にもどします（自分で足した予定 ' + (c.custom || 0) + '件は消えます）';
+        if (k === 'photos') return RESET_TEXT.photos + '：' + (c.photos || 0) + '枚';
+        if (k === 'gifts') return RESET_TEXT.gifts + '：' + (c.gifts || 0) + '件';
+        return RESET_TEXT.prefs + '：このアカウントの設定と、この端末の案内の表示';
+      });
+      $('r-confirm-list').replaceChildren(...lines.map(t => el('li', 'reset-li', t)));
+    }
+  }
+  function resetNext() {
+    if (!resetPicked().length) { $('r-error').textContent = RESET_TEXT.none; return; }
+    $('r-error').textContent = '';
+    resetStage = 2;
+    renderReset();
+    focus($('r-keep'));   // 2回目は「やめる」を先に
+  }
+  function resetKeep() { resetStage = 1; renderReset(); focus($('r-next')); }
+  function resetDo() {
+    if (!store || resetStage !== 2) return;
+    const scopes = resetPicked();
+    const res = store.resetInputs(scopes);
+    if (!res.ok) { $('r-error').textContent = res.errors[0]; resetStage = 1; renderReset(); return; }
+    if (scopes.includes('prefs')) {
+      localPrefs = {}; prefOverride = {};
+      writeLocalPrefs(opts.storage, {});
+      bandsClosed = []; writeBands(opts.storage, []);
+      setGuideSeen(opts.storage, false);
+      try { if (opts.storage) opts.storage.setItem(FLOW_CONFIRMED_KEY, ''); } catch { /* ignore */ }
+      charListBuilt = false; charButtons.clear();
+      applyPrefs();
+    }
+    // 贈る言葉か自分の設定を消したとき：この端末の「どこまで見たか」の控え（sango-gift-seen）も消す（次に届いたことばを知らせるため）
+    if (scopes.includes('gifts') || scopes.includes('prefs')) { writeGiftSeen(0); giftSeen = null; }
+    if (scopes.includes('plans')) { for (const k of Object.keys(drafts)) delete drafts[k]; }
+    resetStage = 1;
+    renderReset();
+    const status = $('r-status');
+    status.textContent = isOffline() ? RESET_TEXT.queued : RESET_TEXT.doing;
+    status.className = 'save-status is-' + (isOffline() ? 'queued' : 'saving');
+    for (const k of RESET_IDS) $('r-' + k).checked = false;
+    Promise.resolve(res.write).then(() => { status.textContent = RESET_TEXT.done; status.className = 'save-status is-saved'; toast(RESET_TEXT.done); },
+      () => { status.textContent = RESET_TEXT.failed; status.className = 'save-status is-failed'; addSaveError('reset', '入力をリセット', RESET_TEXT.failed); });
+    if (state.auth === 'ready') renderAll();
+    focus($('r-next'));
+  }
+
   function renderAll() {
     if (state.auth !== 'ready') return;
     renderTabs();
@@ -1488,6 +1803,9 @@ export function mountUI(document, opts = {}) {
     renderPhotos();
     renderSettings();
     renderDetail(false);
+    renderBands();
+    renderFlowEntry();
+    if (flow && !$('flow').hidden) renderFlow();
   }
   function render(next) {
     if (next) state = next;
@@ -1502,6 +1820,7 @@ export function mountUI(document, opts = {}) {
     if (plannerId && !findItem(plannerId)) forceClose('planner');
     // 初回：家族の設定が無い、またはこのアカウントの役割が分からないとき、1回だけ開く。
     if (!setupShown && state.familyLoaded && (!state.family || !myRole())) openSetup();
+    maybeGuide();
     maybeWelcome();
     runNotify();
     checkGiftArrivals();
@@ -1606,6 +1925,28 @@ export function mountUI(document, opts = {}) {
     track(store.deletePhoto(viewerId), '写真');
     forceClose('viewer');
   };
+  // R10-8
+  for (const t of TABS) { const x = $('hb-' + t + '-x'); if (x) x.onclick = () => closeBand(t); }
+  $('g-next').onclick = () => guideMove(1);
+  $('g-prev').onclick = () => guideMove(-1);
+  $('g-again').onclick = guideAgain;
+  $('g-skip').onclick = () => forceClose('guide');
+  $('s-guide').onclick = showHelpAgain;
+  for (const k of ['u', 't']) { $('flow-open-' + k).onclick = () => openFlow('step'); $('flow-add-' + k).onclick = () => openFlow('add'); }
+  $('fl-c-date').onclick = () => flowPick('date');
+  $('fl-c-later').onclick = () => flowPick('later');
+  $('fl-c-done').onclick = () => flowPick('done');
+  $('fl-date-ok').onclick = flowDateOk;
+  $('fl-prev').onclick = flowPrev;
+  $('fl-to-summary').onclick = flowToSummary;
+  $('fl-confirm').onclick = flowConfirm;
+  $('fl-restart').onclick = flowRestart;
+  $('fl-add-open').onclick = flowAddOpen;
+  $('fl-add-save').onclick = flowAddSave;
+  $('s-reset').onclick = openReset;
+  $('r-next').onclick = resetNext;
+  $('r-keep').onclick = resetKeep;
+  $('r-do').onclick = resetDo;
   $('x-stay').onclick = exitStay;
   $('x-leave').onclick = exitLeave;
   $('exit-dialog').onclick = e => { if (e && e.target === $('exit-dialog')) exitStay(); };
@@ -1662,6 +2003,9 @@ export function mountUI(document, opts = {}) {
     get prefs() { return {...prefs}; },
     get openDetailId() { return detailId; },
     get quickPlanId() { return quick ? quick.id : null; },
+    get flow() { return flow ? {mode: flow.mode, idx: flow.idx, ids: flow.ids.slice(), choices: new Map(flow.choices)} : null; },
+    get guideIndex() { return guideIndex; },
+    openGuide, openFlow, openReset,
     get saveErrors() { return saveErrors.slice(); }
   };
 }

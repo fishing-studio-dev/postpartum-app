@@ -43,6 +43,7 @@
 <main>
 <section id="tab-today" class="tab" role="tabpanel" aria-labelledby="tab-btn-today">
 <div class="screen-head today-head"><h2 class="screen-title ribbon">きょう</h2></div>
+<div id="hb-today" class="help-band" role="note" aria-label="この画面の説明" hidden><p id="hb-today-text" class="help-band-text"></p><button id="hb-today-x" type="button" class="help-band-x" aria-label="この説明をとじる">×</button></div>
 <div id="date-band" class="date-band">
 <p class="screen-sub date-chip"><span id="today-date" class="today-date"></span><span class="role-chip"><span id="role-short" class="role-short" aria-hidden="true"></span><span id="role-label" class="role-label visually-hidden"></span></span></p>
 <div id="birth-card" class="birth-card">
@@ -99,12 +100,14 @@
 <div id="day-groups" class="day-groups"></div>
 <p id="today-plan-status" class="save-status" role="status" aria-live="polite"></p>
 </section>
+<div class="flow-entry"><button id="flow-open-t" type="button" class="big flow-open">予定を順番に決める</button><button id="flow-add-t" type="button" class="soft-btn flow-add">＋ 予定を追加</button></div>
 <button id="search-entry" type="button" class="search-entry">やることをさがす</button>
 <p id="notify-line" class="notify-line">お知らせ：アプリを開いている間のみ</p>
 </section>
 
 <section id="tab-week" class="tab" role="tabpanel" aria-labelledby="tab-btn-week" hidden>
 <div class="screen-head cloud-head week-head"><h2 class="screen-title ribbon">1週間</h2><p id="w-tag" class="head-tag">今日から7日間</p><span id="w-chara-wrap" class="head-chara-wrap" aria-hidden="true"><img id="w-chara" class="head-chara deco" alt="" aria-hidden="true" width="112" height="112" hidden></span></div>
+<div id="hb-week" class="help-band" role="note" aria-label="この画面の説明" hidden><p id="hb-week-text" class="help-band-text"></p><button id="hb-week-x" type="button" class="help-band-x" aria-label="この説明をとじる">×</button></div>
 <div class="week-nav" role="group" aria-label="日付の移動">
 <button id="w-prev" type="button" class="nav-arrow" aria-label="前の7日">‹</button>
 <p id="w-range" class="week-range"></p>
@@ -124,6 +127,8 @@
 
 <section id="tab-undecided" class="tab" role="tabpanel" aria-labelledby="tab-btn-undecided" hidden>
 <div class="screen-head cloud-head undecided-head"><h2 class="screen-title ribbon">まだ未定</h2><p class="head-tag">ひとつずつ決めよう</p><span id="u-chara-wrap" class="head-chara-wrap" aria-hidden="true"><img id="u-chara" class="head-chara deco" alt="" aria-hidden="true" width="112" height="112" hidden></span></div>
+<div id="hb-undecided" class="help-band" role="note" aria-label="この画面の説明" hidden><p id="hb-undecided-text" class="help-band-text"></p><button id="hb-undecided-x" type="button" class="help-band-x" aria-label="この説明をとじる">×</button></div>
+<div class="flow-entry"><button id="flow-open-u" type="button" class="big flow-open">予定を順番に決める</button><button id="flow-add-u" type="button" class="soft-btn flow-add">＋ 予定を追加</button></div>
 <p class="small u-sub">日付か担当が決まっていない、まだ済んでいない項目</p>
 <p id="u-count" class="small"></p>
 <p id="u-status" class="save-status" role="status" aria-live="polite"></p>
@@ -135,6 +140,7 @@
 
 <section id="tab-todo" class="tab" role="tabpanel" aria-labelledby="tab-btn-todo" hidden>
 <div class="screen-head cloud-head chara-head todo-head"><h2 class="screen-title ribbon">やること</h2><span id="t-chara-wrap" class="head-chara-wrap" aria-hidden="true"><img id="t-chara" class="head-chara deco" alt="" aria-hidden="true" width="112" height="112" hidden></span></div>
+<div id="hb-todo" class="help-band" role="note" aria-label="この画面の説明" hidden><p id="hb-todo-text" class="help-band-text"></p><button id="hb-todo-x" type="button" class="help-band-x" aria-label="この説明をとじる">×</button></div>
 <div class="search-row"><label class="search"><span class="visually-hidden">さがす</span><input id="q" type="search" maxlength="40" autocomplete="off" placeholder="さがす（名前・メモ・持ち物など）" enterkeyhint="search"></label><button id="q-clear" type="button" class="soft-btn small-btn" hidden>検索を消す</button></div>
 <div id="view-switch" class="seg" role="group" aria-label="表示する項目"><button id="v-all" type="button" class="seg-btn" aria-pressed="true">全件</button><button id="v-open" type="button" class="seg-btn" aria-pressed="false">未完了</button><button id="v-done" type="button" class="seg-btn" aria-pressed="false">済み</button></div>
 <div id="chips" class="chips" role="group" aria-label="分類"></div>
@@ -152,6 +158,7 @@
 </section>
 
 <section id="tab-more" class="tab" role="tabpanel" aria-labelledby="tab-btn-more" hidden>
+<div id="hb-more" class="help-band" role="note" aria-label="この画面の説明" hidden><p id="hb-more-text" class="help-band-text"></p><button id="hb-more-x" type="button" class="help-band-x" aria-label="この説明をとじる">×</button></div>
 <div class="seg big-seg" role="group" aria-label="アルバムと設定の切りかえ"><button id="more-album" type="button" class="seg-btn" aria-pressed="true">アルバム</button><button id="more-settings" type="button" class="seg-btn" aria-pressed="false">設定</button></div>
 <div id="pane-album" class="pane">
 <div class="screen-head cloud-head chara-head album-head"><h2 class="screen-title ribbon">アルバム</h2><span id="a-chara-wrap" class="head-chara-wrap" aria-hidden="true"><img id="a-chara" class="head-chara deco" alt="" aria-hidden="true" width="112" height="112" hidden></span></div>
@@ -191,6 +198,14 @@
 <ul id="char-list" class="char-list" aria-label="キャラクター"></ul>
 <p id="char-status" class="small" role="status" aria-live="polite"></p>
 <p class="small">文字の大きさは、端末やブラウザの文字サイズの設定に合わせて変わります。</p>
+</section>
+<section class="card stitch set-group" aria-labelledby="sg-help"><h3 id="sg-help" class="card-title">使い方</h3>
+<button id="s-guide" type="button" class="soft-btn">使い方をもう一度見る</button>
+<p class="small">はじめの案内と、各画面の上の説明が、もう一度出ます。</p>
+</section>
+<section class="card stitch set-group" aria-labelledby="sg-reset"><h3 id="sg-reset" class="card-title">入力をリセット</h3>
+<p class="small">入力したことを消して、はじめの状態にもどします。消す前に2回確かめます。</p>
+<button id="s-reset" type="button" class="soft-btn danger">入力をリセット</button>
 </section>
 <section class="card stitch set-group" aria-labelledby="sg-account"><h3 id="sg-account" class="card-title">アカウント</h3>
 <button id="s-logout" type="button" class="soft-btn">ログアウト</button>
@@ -316,6 +331,93 @@
 <p id="v-by" class="small center-text"></p>
 <button id="v-delete" type="button" class="soft-btn danger">削除</button>
 <button id="v-close" type="button" class="soft-btn close-btn">とじる</button>
+</div>
+</section>
+
+<section id="flow" class="overlay" role="dialog" aria-modal="true" aria-labelledby="fl-title" hidden>
+<div class="sheet">
+<button id="fl-back" type="button" class="back-btn">← もどる</button>
+<h2 id="fl-title" class="sheet-title">予定を順番に決める</h2>
+<p id="fl-progress" class="small flow-progress" aria-live="polite"></p>
+<div id="fl-step" class="flow-step">
+<p id="fl-cat" class="flow-cat"></p>
+<h3 id="fl-item-title" class="flow-item-title" tabindex="-1"></h3>
+<p id="fl-deadline" class="d-text"></p>
+<p id="fl-place" class="small"></p>
+<p id="fl-current" class="small flow-current"></p>
+<div class="flow-choices" role="group" aria-label="この予定をどうするか">
+<button id="fl-c-date" type="button" class="big flow-choice">日にちを入れる</button>
+<button id="fl-c-later" type="button" class="soft-btn flow-choice">あとで</button>
+<button id="fl-c-done" type="button" class="soft-btn flow-choice">済み</button>
+</div>
+<fieldset id="fl-date-box" class="d-block plan-block" hidden><legend>いつ・誰が</legend>
+<div class="plan-row"><label class="field">日付<input id="fl-date" type="date" min="2025-01-01" max="2030-12-31"></label><label class="field">時刻（なくてもよい）<input id="fl-time" type="time"></label></div>
+<label class="field">担当（夫／妻／2人）<select id="fl-who"></select></label>
+<p id="fl-error" class="error" role="alert"></p>
+<button id="fl-date-ok" type="button" class="big">この日にする</button>
+</fieldset>
+<div class="row-actions flow-nav"><button id="fl-prev" type="button" class="soft-btn">前へ</button><button id="fl-to-summary" type="button" class="soft-btn">一覧へ進む</button></div>
+</div>
+<div id="fl-summary" class="flow-summary" hidden>
+<h3 id="fl-summary-title" class="card-title">決めたことの一覧</h3>
+<p id="fl-summary-note" class="small"></p>
+<ul id="fl-list" class="flow-list" aria-labelledby="fl-summary-title"></ul>
+<button id="fl-confirm" type="button" class="big">確定する</button>
+<button id="fl-restart" type="button" class="soft-btn">最初から見直す</button>
+</div>
+<div id="fl-done-box" class="flow-done" hidden><p id="fl-done-text" class="flow-done-text"></p></div>
+<div id="fl-add-box" class="d-block flow-add-box" hidden>
+<h3 id="fl-add-title-h">予定を追加</h3>
+<label class="field">なにをする<input id="fl-add-title" type="text" maxlength="80" autocomplete="off"></label>
+<label class="field">分類<select id="fl-add-cat"></select></label>
+<div class="plan-row"><label class="field">日付<input id="fl-add-date" type="date" min="2025-01-01" max="2030-12-31"></label><label class="field">時刻（なくてもよい）<input id="fl-add-time" type="time"></label></div>
+<label class="field">担当（夫／妻／2人）<select id="fl-add-who"></select></label>
+<p id="fl-add-error" class="error" role="alert"></p>
+<button id="fl-add-save" type="button" class="big">追加する</button>
+</div>
+<button id="fl-add-open" type="button" class="soft-btn flow-add">＋ 予定を追加</button>
+<p id="fl-status" class="save-status" role="status" aria-live="polite"></p>
+<button id="fl-close" type="button" class="soft-btn close-btn">とじる</button>
+</div>
+</section>
+
+<section id="guide" class="overlay center-overlay guide-overlay" role="dialog" aria-modal="true" aria-labelledby="g-title" aria-describedby="g-text" hidden>
+<div class="sheet">
+<button id="g-back" type="button" class="back-btn">← もどる</button>
+<div class="guide-speaker">
+<img id="g-chara" class="guide-chara" alt="" aria-hidden="true" width="96" height="96">
+<div class="guide-bubble"><h2 id="g-title" class="sheet-title guide-title"></h2><p id="g-text" class="guide-text"></p></div>
+</div>
+<p id="g-step" class="small center-text guide-step"></p>
+<div class="row-actions guide-nav"><button id="g-prev" type="button" class="soft-btn">前へ</button><button id="g-next" type="button" class="big">つぎへ</button></div>
+<div class="row-actions guide-nav"><button id="g-skip" type="button" class="soft-btn">スキップ</button><button id="g-again" type="button" class="soft-btn" hidden>もう一度見る</button></div>
+<button id="g-close" type="button" class="soft-btn close-btn">とじる</button>
+</div>
+</section>
+
+<section id="reset" class="overlay" role="dialog" aria-modal="true" aria-labelledby="r-title" hidden>
+<div class="sheet">
+<button id="r-back" type="button" class="back-btn">← もどる</button>
+<h2 id="r-title" class="sheet-title">入力をリセット</h2>
+<div id="r-stage1" class="reset-stage">
+<p class="small">消すものを選んでください（1つ以上）。出生日と家族の名前は消えません。</p>
+<fieldset class="d-block reset-scopes"><legend>消すもの</legend>
+<label class="check-row"><input id="r-plans" type="checkbox"><span>予定・チェック（やることを、はじめの状態にもどします。いつ・誰が・済み・メモ・「予定は不要」の印が消え、自分で足した予定も消えます）</span></label>
+<label class="check-row"><input id="r-photos" type="checkbox"><span>写真（アルバムの写真）</span></label>
+<label class="check-row"><input id="r-gifts" type="checkbox"><span>贈る言葉（ふたりのことば）</span></label>
+<label class="check-row"><input id="r-prefs" type="checkbox"><span>自分の設定（キャラクターのシリーズ・動き・案内の表示）</span></label>
+</fieldset>
+<p id="r-error" class="error" role="alert"></p>
+<button id="r-next" type="button" class="big">次へ（確認）</button>
+</div>
+<div id="r-stage2" class="reset-stage reset-confirm" hidden>
+<h3 id="r-confirm-title" class="reset-confirm-title" tabindex="-1">本当に消しますか？</h3>
+<ul id="r-confirm-list" class="reset-list"></ul>
+<p class="reset-warn">消したものは元にもどせません。予定・写真・言葉は2人で使っているので、もう1人の画面からも消えます。</p>
+<div class="row-actions"><button id="r-do" type="button" class="soft-btn danger">消す</button><button id="r-keep" type="button" class="big">やめる</button></div>
+</div>
+<p id="r-status" class="save-status" role="status" aria-live="polite"></p>
+<button id="r-cancel" type="button" class="soft-btn close-btn">とじる</button>
 </div>
 </section>
 

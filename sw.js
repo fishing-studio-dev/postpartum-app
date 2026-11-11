@@ -35,7 +35,9 @@ importScripts('./firebase-config.js');
 //   chars/series-art.js と40枚の絵（art/char_felt_* / char_pixel_* / char_embroidery_* / char_crochet_*）を最初から入れる一覧に足した（シリーズ1と同じ扱い）。
 //   しくみ（install・activate・fetch）は変えていない。
 // R10-7-2：キャラの名前が途中で折れないように直した（ui.js・style.css）。絵の大きさを面積でそろえ直した。しくみは同じ。
-const VERSION = 'r10-7-2026-11-11-2';
+// R10-8：出生届を大村市で出す形に（omura.js）・予定を順番に決める（flow.js）・使い方の説明（help.js）・入力をリセットを足したので
+//   r10-8-2026-11-11-1 に上げた。新しい3ファイルを最初から入れる一覧に足した。しくみ（install・activate・fetch）は変えていない。
+const VERSION = 'r10-8-2026-11-11-1';
 const PREFIX = 'postpartum-r9-';
 const LEGACY_PREFIXES = ['postpartum-r8-', 'postpartum-r7-', 'postpartum-r6-', 'postpartum-r5-'];
 const CACHE = PREFIX + VERSION;
@@ -105,6 +107,9 @@ const FILES = [
   './art/char_crochet_10_pony.webp',
   './stroll.js',
   './gifts.js',
+  './omura.js',
+  './flow.js',
+  './help.js',
   './art/char_mochi_v4_01_flower.webp',
   './art/char_mochi_v4_02_raincloud.webp',
   './art/char_mochi_v4_03_pear.webp',

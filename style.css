@@ -813,3 +813,51 @@ img[data-char^="pixel-"] { image-rendering: pixelated; }
 
 /* R10-7-2：キャラの名前は途中で折り返さない（きょうの説明の文の名前・設定の一覧の名前。全シリーズ共通）。 */
 .stage-caption .name-nb, .char-name { white-space: nowrap; word-break: keep-all; }
+
+/* ==== R10-8：使い方の説明（各タブの上の帯・はじめの案内）・予定を順番に決める・入力をリセット ====
+   動き（animation / transition）は足していない。色だけでなく文字でも分かるようにする。 */
+.help-band { display: flex; align-items: flex-start; gap: .5rem; margin: .4rem 0 .6rem; padding: .6rem .5rem .6rem .9rem; border: 2px dashed var(--stitch); border-radius: 16px; background: var(--cream); }
+.help-band-text { flex: 1 1 auto; margin: 0; font-size: .9375rem; line-height: 1.55; color: var(--ink); }
+.help-band-text::before { content: "使い方　"; font-weight: 800; color: var(--primary); }
+.help-band-x { flex: 0 0 auto; min-width: var(--tap); min-height: var(--tap); border: 2px solid var(--line); border-radius: 50%; background: var(--card); color: var(--ink); font-size: 1.125rem; }
+.flow-entry { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0; }
+.flow-entry .flow-open { flex: 1 1 12rem; min-width: 0; }
+.flow-entry .flow-add { flex: 1 1 8rem; font-weight: 700; }
+.flow-progress { margin: 0; font-weight: 700; color: var(--muted); }
+.flow-step { display: flex; flex-direction: column; gap: .45rem; padding: .8rem .9rem; border: 2px dashed var(--stitch); border-radius: 18px; background: var(--cream); }
+.flow-cat { margin: 0; align-self: flex-start; padding: .1rem .7rem; border-radius: 999px; background: var(--lavender); font-size: .875rem; font-weight: 700; }
+.flow-item-title { margin: 0; font-size: 1.25rem; line-height: 1.4; }
+.flow-current { color: var(--primary); font-weight: 700; }
+.flow-choices { display: flex; flex-direction: column; gap: .45rem; }
+.flow-choices .flow-choice { width: 100%; min-height: 56px; font-weight: 700; }
+.flow-choice[aria-pressed="true"]::before { content: "✓ "; }
+.soft-btn.flow-choice[aria-pressed="true"] { background: var(--pink-light); border-color: var(--primary); }
+.flow-nav > * { flex: 1 1 6rem; }
+.flow-summary { display: flex; flex-direction: column; gap: .5rem; }
+.flow-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }
+.flow-li { display: flex; align-items: center; gap: .5rem; padding: .5rem .6rem; border: 2px solid var(--line); border-radius: 14px; background: var(--card); }
+.flow-li.is-date { border-color: #c9b3e6; background: var(--lavender); }
+.flow-li.is-done { border-color: #8fb98a; background: var(--sage); }
+.flow-li-text { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+.flow-li-title { font-weight: 700; overflow-wrap: anywhere; }
+.flow-li-choice { font-size: .875rem; color: var(--muted); }
+.flow-li-change { flex: 0 0 auto; }
+.flow-done-text { margin: 0; padding: .7rem .9rem; border-radius: 14px; background: var(--sage); font-weight: 700; }
+.flow-add-box { display: flex; flex-direction: column; gap: .45rem; }
+.guide-overlay .sheet { border-radius: 26px; max-width: 400px; margin: 0 1rem; }
+.guide-speaker { display: flex; align-items: flex-start; gap: .6rem; }
+.guide-chara { flex: 0 0 auto; width: 96px; height: 96px; object-fit: contain; }
+.guide-bubble { position: relative; flex: 1 1 auto; padding: .7rem .9rem; border: 2px solid var(--stitch); border-radius: 18px; background: var(--cream); }
+.guide-bubble::before { content: ""; position: absolute; left: -10px; top: 28px; width: 16px; aspect-ratio: 1; background: var(--cream); border-left: 2px solid var(--stitch); border-bottom: 2px solid var(--stitch); transform: rotate(45deg); }
+.guide-title { font-size: 1.125rem; }
+.guide-text { margin: .3rem 0 0; line-height: 1.6; }
+.guide-step { margin: 0; font-weight: 700; }
+#app[data-guide-tab] .tabs { z-index: 41; }
+.tabs .tab-btn[data-guide="on"] { outline: 3px solid var(--focus); outline-offset: -3px; background: var(--honey); color: var(--ink); }
+.check-row { display: flex; align-items: flex-start; gap: .6rem; min-height: var(--tap); padding: .35rem 0; color: var(--ink); font-size: 1rem; }
+.check-row input { flex: 0 0 auto; width: 1.5rem; height: 1.5rem; margin: .1rem 0 0; accent-color: var(--primary); }
+.reset-scopes { display: flex; flex-direction: column; }
+.reset-confirm { display: flex; flex-direction: column; gap: .5rem; padding: .8rem .9rem; border: 2px solid #e7b9b5; border-radius: 18px; background: #fff3f2; }
+.reset-confirm-title { margin: 0; color: var(--danger); font-size: 1.2rem; }
+.reset-list { margin: 0; padding-left: 1.2em; }
+.reset-warn { margin: 0; font-weight: 700; color: var(--danger); }
